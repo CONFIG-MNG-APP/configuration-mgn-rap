@@ -4,15 +4,15 @@ strict ( 2 );
 define behavior for ZI_MM_ROUTE_CONF alias RouteConf
 persistent table zmmrouteconf
 lock master
-authorization master ( instance )
-//etag master <field_name>
+authorization master ( global )
+etag master ChangedAt
 {
   create;
   update;
   delete;
 
   field ( readonly, numbering : managed ) ItemId;
-  field ( readonly ) CreatedBy, CreatedAt, ChangedBy, ChangedAt;
+  field ( readonly ) CreatedBy, CreatedAt, ChangedBy, ChangedAt, VersionNo;
 
   determination set_defaults on modify { create; }
 

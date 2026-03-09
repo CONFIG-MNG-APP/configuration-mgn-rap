@@ -10,15 +10,21 @@
 define root view entity ZI_MM_ROUTE_CONF
   as select from zmmrouteconf
 
-  association [1..1] to ZI_ENV_DEF    as _Env   on $projection.EnvId   = _Env.EnvId
+  association [1..1] to ZI_ENV_DEF    as _Env   on $projection.EnvId = _Env.EnvId
   association [0..1] to ZI_PLANT_UNIT as _Plant on $projection.PlantId = _Plant.PlantId
 {
   key item_id      as ItemId,
 
       req_id       as ReqId,
+
+      @EndUserText.label: 'Environment'
+      @Consumption.valueHelpDefinition: [{ entity: { name: 'ZI_ENV_DEF', element: 'EnvId' } }]
       env_id       as EnvId,
 
+      @EndUserText.label: 'Plant'
+      @Consumption.valueHelpDefinition: [{ entity: { name: 'ZI_PLANT_UNIT', element: 'PlantId' } }]
       plant_id     as PlantId,
+
       send_wh      as SendWh,
       receive_wh   as ReceiveWh,
       inspector_id as InspectorId,

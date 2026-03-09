@@ -1,0 +1,5 @@
+@EndUserText.label: 'Service Definition for Catalog'
+define service ZSD_CONF_CATALOG {
+  expose ZC_CONF_CATALOG as ConfigCatalog;
+  expose ZC_CONF_FIELD_DEF as ConfigFieldDef;
+}

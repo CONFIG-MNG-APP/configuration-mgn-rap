@@ -1,0 +1,6 @@
+@EndUserText.label: 'Authorization for MM Safe Stock'
+@MappingRole: true
+define role ZI_MM_SAFE_STOCK {
+  grant select on ZI_MM_SAFE_STOCK
+  where 1 = 1;
+}

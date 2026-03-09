@@ -1,0 +1,5 @@
+@EndUserText.label: 'Service for Change Request'
+define service ZUI_CONF_REQ {
+  expose ZC_CONF_REQ_H;
+  expose ZC_CONF_REQ_I;
+}

@@ -1,0 +1,6 @@
+@EndUserText.label: 'Service Definition for Config Mng App'
+define service ZSD_CONF_MNG_APP {
+  expose ZC_CONF_CATALOG as ConfigCatalog;
+  expose ZC_CONF_FIELD_DEF as ConfigFieldDef;
+  expose ZC_MM_ROUTE_CONF as MMRouteConf;
+}

@@ -9,15 +9,14 @@ CLASS zcl_gsp26_rule_writer DEFINITION PUBLIC FINAL CREATE PUBLIC.
                 iv_env_id   TYPE zde_env_id
                 is_old_data TYPE any OPTIONAL
                 is_new_data TYPE any OPTIONAL
-      RAISING   cx_uuid_error. " Giải quyết lỗi Exception UUID ở image_3c8b4b.png
+      RAISING   cx_uuid_error.
 ENDCLASS.
 
 CLASS zcl_gsp26_rule_writer IMPLEMENTATION.
   METHOD log_audit_entry.
-    " Lấy timestamp hiện tại (khớp với kiểu TIMESTAMPL trong bảng ZAUDITLOG)
+    " Lấy timestamp chính xác cho bảng ZAUDITLOG
     GET TIME STAMP FIELD DATA(lv_timestamp).
 
-    " Map chính xác với cấu trúc định nghĩa trong bảng ZAUDITLOG (image_3c8462.png)
     DATA(ls_audit) = VALUE zauditlog(
       log_id      = cl_system_uuid=>create_uuid_x16_static( )
       req_id      = iv_req_id
@@ -26,13 +25,13 @@ CLASS zcl_gsp26_rule_writer IMPLEMENTATION.
       action_type = iv_act_type
       table_name  = iv_tab_name
       env_id      = iv_env_id
+      " Serialize data sang JSON để lưu trữ linh hoạt
       old_data    = /ui2/cl_json=>serialize( data = is_old_data )
       new_data    = /ui2/cl_json=>serialize( data = is_new_data )
-      changed_by  = sy-uname
-      changed_at  = lv_timestamp " Đã sửa lỗi Type Mismatch ở image_3c8840.png
+      changed_by  = sy-uname " Ghi nhận User thực hiện
+      changed_at  = lv_timestamp
     ).
 
-    " Thực hiện ghi vào Database
-    INSERT zauditlog FROM ls_audit.
+    INSERT zauditlog FROM @ls_audit.
   ENDMETHOD.
 ENDCLASS.

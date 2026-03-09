@@ -8,7 +8,7 @@ authorization master ( instance )
 etag master ChangedAt
 {
   create;
-  update;
+  update ( features: instance );
   delete;
 
   association _Items { create; }
@@ -23,12 +23,12 @@ etag master ChangedAt
     ApprovedBy, ApprovedAt,
     RejectedBy, RejectedAt;
 
-  // Nếu status chỉ đổi bằng action
+  // Status chỉ đổi bằng action
   field ( readonly ) Status;
 
-  action submit  result [1] $self;
-  action approve result [1] $self;
-  action reject  result [1] $self;
+  action ( features: instance ) submit  result [1] $self;
+  action ( features: instance ) approve result [1] $self;
+  action ( features: instance ) reject  result [1] $self;
 
   validation validate_before_save on save { create; update; }
   determination set_default_and_admin_fields on modify { create; update; }
@@ -67,7 +67,7 @@ etag master ChangedAt
   // UUID generated
   field ( numbering: managed, readonly ) ReqItemId;
 
-  // FK theo composition: framework set khi create item, user không được sửa sau đó
+  // FK theo composition
   field ( readonly:update ) ReqId;
 
   field ( readonly )

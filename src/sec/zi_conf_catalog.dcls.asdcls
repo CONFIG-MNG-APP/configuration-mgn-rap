@@ -1,0 +1,6 @@
+@EndUserText.label: 'Authorization for Config Catalog'
+@MappingRole: true
+define role ZI_CONF_CATALOG {
+  grant select on ZI_CONF_CATALOG
+  where 1 = 1;
+}

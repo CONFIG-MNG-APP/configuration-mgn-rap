@@ -1,5 +1,7 @@
 @Metadata.layer: #CORE
 
+@Search.searchable: true
+
 @UI: {
   headerInfo: {
     typeName: 'Configuration',
@@ -26,37 +28,57 @@ annotate entity ZC_CONF_CATALOG with
       targetElement: '_FieldDef' }
   ]
 
-  @UI: { lineItem: [{ position: 10, importance: #HIGH, label: 'UUID' }],
-         identification: [{ position: 10, label: 'UUID' }] }
+  @UI: {
+  identification: [
+    { position: 10, label: 'UUID' }
+  ]
+}
   ConfId;
 
+  @Consumption.valueHelpDefinition: [
+   { entity: { name: 'ZI_VH_MODULE', element: 'ModuleId' } }
+  ]
   @UI: { lineItem: [{ position: 20, importance: #HIGH, label: 'Module' }],
          identification: [{ position: 20, label: 'Module' }],
          selectionField: [{ position: 10 }] }
   ModuleId;
 
-  @UI: { lineItem: [{ position: 30, importance: #HIGH, label: 'Configuration Name' }],
-         identification: [{ position: 30, label: 'Configuration Name' }] }
+  @UI: {
+  identification: [
+    { position: 30, label: 'Configuration Name' }
+  ],
+  lineItem: [{ position: 30, importance: #HIGH, label: 'Configuration Name' }]
+  }
+  @Search.defaultSearchElement: true
+  @Search.fuzzinessThreshold: 0.8
   ConfName;
 
+  @Consumption.valueHelpDefinition: [
+      { entity: { name: 'ZI_VH_CONFTYPE', element: 'ConfType' } }
+    ]
   @UI: { lineItem: [{ position: 40, label: 'Configuration Type' }],
-         identification: [{ position: 40, label: 'Configuration Type' }],
-         selectionField: [{ position: 20 }] }
+       identification: [{ position: 40, label: 'Configuration Type' }],
+       selectionField: [{ position: 20 }] }
   ConfType;
 
   @UI: { identification: [{ position: 50, label: 'Description' }] }
   Description;
 
-  @UI: { identification: [{ position: 60, label: 'Target CDS' }] }
+  @UI: { lineItem: [{ position: 45, label: 'Target CDS' }],
+        identification: [{ position: 60, label: 'Target CDS' }] }
   TargetCds;
 
-  @UI: { lineItem: [{ position: 50, importance: #HIGH, label: 'Active' }],
-         identification: [{ position: 70, label: 'Active' }] }
+  @UI: {
+  lineItem: [{ position: 50, importance: #HIGH, label: 'Active', criticality: 'ActiveCriticality' }],
+  identification: [{ position: 70, label: 'Active' }]
+  }
   IsActive;
 
   @UI: { identification: [{ position: 80, label: 'Created By' }] }
   CreatedBy;
 
-  @UI: { identification: [{ position: 90, label: 'Created At' }] }
+  @UI: { lineItem: [{ position: 70, label: 'Created At' }],
+       identification: [{ position: 90, label: 'Created At' }] }
   CreatedAt;
+
 }

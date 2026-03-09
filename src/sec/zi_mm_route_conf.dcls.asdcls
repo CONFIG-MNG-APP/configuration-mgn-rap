@@ -1,0 +1,6 @@
+@EndUserText.label: 'Authorization for MM Route Config'
+@MappingRole: true
+define role ZI_MM_ROUTE_CONF {
+  grant select on ZI_MM_ROUTE_CONF
+  where 1 = 1;
+}

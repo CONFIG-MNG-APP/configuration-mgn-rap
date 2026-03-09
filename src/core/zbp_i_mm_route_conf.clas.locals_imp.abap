@@ -1,8 +1,8 @@
 CLASS lhc_RouteConf DEFINITION INHERITING FROM cl_abap_behavior_handler.
   PRIVATE SECTION.
 
-    METHODS get_instance_authorizations FOR INSTANCE AUTHORIZATION
-      IMPORTING keys REQUEST requested_authorizations FOR RouteConf RESULT result.
+    METHODS get_global_authorizations  FOR GLOBAL AUTHORIZATION
+      IMPORTING REQUEST requested_authorizations FOR RouteConf RESULT result.
 
     METHODS set_defaults FOR DETERMINE ON MODIFY
       IMPORTING keys FOR RouteConf~set_defaults.
@@ -17,9 +17,15 @@ ENDCLASS.
 
 CLASS lhc_RouteConf IMPLEMENTATION.
 
-  METHOD get_instance_authorizations.
+  METHOD get_global_authorizations .
     "Template-safe: leave empty -> framework allows based on authorization object / access control
     "You can implement later using your ZUSERROLE.
+
+  result = VALUE #(
+    %create = if_abap_behv=>auth-allowed
+    %update = if_abap_behv=>auth-allowed
+    %delete = if_abap_behv=>auth-allowed ).
+
   ENDMETHOD.
 
   METHOD set_defaults.

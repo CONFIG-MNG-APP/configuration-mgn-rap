@@ -18,6 +18,17 @@ define root view entity ZIR_CONF_REQ_H
       status      as Status,
       reason      as Reason,
 
+             /* Status Criticality for UI coloring */
+      case status
+        when 'D' then 0   -- Draft (Grey)
+        when 'S' then 2   -- Submitted (Yellow)
+        when 'A' then 3   -- Approved/Active (Green)
+        when 'R' then 1   -- Rejected (Red)
+        else 0
+      end               as StatusCriticality,
+
+
+
       /* Admin */
       @Semantics.user.createdBy: true
       created_by  as CreatedBy,

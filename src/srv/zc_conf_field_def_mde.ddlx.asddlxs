@@ -1,0 +1,23 @@
+@Metadata.layer: #CORE
+annotate entity ZC_CONF_FIELD_DEF with
+{
+  @UI: { lineItem: [{ position: 10, label: 'Field Name' }],
+         identification: [{ position: 10, label: 'Field Name' }] }
+  FieldName;
+
+  @UI: { lineItem: [{ position: 20, label: 'Field Label' }],
+         identification: [{ position: 20, label: 'Field Label' }] }
+  FieldLabel;
+
+  @UI: { lineItem: [{ position: 30, label: 'Data Type' }],
+         identification: [{ position: 30, label: 'Data Type' }] }
+  DataType;
+
+  @UI: { lineItem: [{ position: 40, label: 'Required' }],
+         identification: [{ position: 40, label: 'Required' }] }
+  IsRequired;
+
+  @UI: { lineItem: [{ position: 50, label: 'Value Help Type' }],
+         identification: [{ position: 50, label: 'Value Help Type' }] }
+  ValueHelpType;
+}

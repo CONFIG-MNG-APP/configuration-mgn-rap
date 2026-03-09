@@ -1,0 +1,128 @@
+@Metadata.layer: #CORE
+
+@UI: {
+  headerInfo: {
+    typeName: 'Warehouse Route',
+    typeNamePlural: 'Warehouse Routes',
+    title: {
+      type: #STANDARD,
+      label: 'Plant',
+      value: 'PlantId'
+    },
+    description: {
+      value: 'TransMode'
+    }
+  }
+}
+
+annotate entity ZC_MM_ROUTE_CONF
+  with
+{
+  @UI.facet: [
+    {
+      id: 'GeneralInfo',
+      purpose: #STANDARD,
+      type: #IDENTIFICATION_REFERENCE,
+      label: 'General Information',
+      position: 10
+    },
+    {
+      id: 'RouteDetails',
+      purpose: #STANDARD,
+      type: #FIELDGROUP_REFERENCE,
+      label: 'Route Details',
+      targetQualifier: 'ROUTE',
+      position: 20
+    },
+    {
+      id: 'AdminInfo',
+      purpose: #STANDARD,
+      type: #FIELDGROUP_REFERENCE,
+      label: 'Administration',
+      targetQualifier: 'ADMIN',
+      position: 30
+    }
+  ]
+
+  @UI: {
+    lineItem:       [ { position: 10, label: 'Environment' } ],
+    identification: [ { position: 10, label: 'Environment' } ],
+    selectionField: [ { position: 10 } ]
+  }
+  EnvId;
+
+  @UI: {
+    lineItem:       [ { position: 20, label: 'Plant' } ],
+    identification: [ { position: 20, label: 'Plant' } ],
+    selectionField: [ { position: 20 } ]
+  }
+  PlantId;
+
+  @UI: {
+    lineItem:       [ { position: 30, label: 'Sending Warehouse' } ],
+    fieldGroup:     [ { qualifier: 'ROUTE', position: 10, label: 'Sending Warehouse' } ],
+    selectionField: [ { position: 30 } ]
+  }
+  SendWh;
+
+  @UI: {
+    lineItem:       [ { position: 40, label: 'Receiving Warehouse' } ],
+    fieldGroup:     [ { qualifier: 'ROUTE', position: 20, label: 'Receiving Warehouse' } ],
+    selectionField: [ { position: 40 } ]
+  }
+  ReceiveWh;
+
+  @UI: {
+    lineItem:       [ { position: 50, label: 'Transport Mode' } ],
+    fieldGroup:     [ { qualifier: 'ROUTE', position: 30, label: 'Transport Mode' } ],
+    selectionField: [ { position: 50 } ]
+  }
+  TransMode;
+
+  @UI: {
+    lineItem:       [ { position: 60, label: 'Allowed' } ],
+    fieldGroup:     [ { qualifier: 'ROUTE', position: 40, label: 'Allowed' } ],
+    selectionField: [ { position: 60 } ]
+  }
+  IsAllowed;
+
+  @UI: {
+    lineItem:       [ { position: 70, label: 'Inspector' } ],
+    fieldGroup:     [ { qualifier: 'ROUTE', position: 50, label: 'Inspector' } ],
+    selectionField: [ { position: 70 } ]
+  }
+  InspectorId;
+
+  @UI: {
+    lineItem:   [ { position: 80, label: 'Version' } ],
+    fieldGroup: [ { qualifier: 'ADMIN', position: 10, label: 'Version' } ]
+  }
+  VersionNo;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'ADMIN', position: 20, label: 'Request ID' } ]
+  }
+  ReqId;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'ADMIN', position: 30, label: 'Created By' } ]
+  }
+  CreatedBy;
+
+  @UI: {
+    lineItem:   [ { position: 90, label: 'Created At' } ],
+    fieldGroup: [ { qualifier: 'ADMIN', position: 40, label: 'Created At' } ]
+  }
+  CreatedAt;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'ADMIN', position: 50, label: 'Changed By' } ]
+  }
+  ChangedBy;
+
+  @UI: {
+    lineItem:   [ { position: 100, label: 'Changed At' } ],
+    fieldGroup: [ { qualifier: 'ADMIN', position: 60, label: 'Changed At' } ]
+  }
+  ChangedAt;
+}

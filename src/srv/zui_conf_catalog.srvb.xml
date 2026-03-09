@@ -13,7 +13,7 @@
       <NAME>ZUI_CONF_CATALOG</NAME>
      </BIND_TYPE_IMPL>
      <BIND_TYPE>ODATA</BIND_TYPE>
-     <BIND_TYPE_VERSION>V4</BIND_TYPE_VERSION>
+     <BIND_TYPE_VERSION>V2</BIND_TYPE_VERSION>
      <SERVICES>
       <item>
        <SERVICE_NAME>ZUI_CONF_CATALOG</SERVICE_NAME>
@@ -22,9 +22,9 @@
          <SERVICE_VERSION>0001</SERVICE_VERSION>
          <RELEASE_STATE>NOT_RELEASED</RELEASE_STATE>
          <SRVD_REF>
-          <URI>/sap/bc/adt/ddic/srvd/sources/zui_conf_catalog</URI>
+          <URI>/sap/bc/adt/ddic/srvd/sources/zsd_conf_catalog</URI>
           <TYPE>SRVD/SRV</TYPE>
-          <NAME>ZUI_CONF_CATALOG</NAME>
+          <NAME>ZSD_CONF_CATALOG</NAME>
          </SRVD_REF>
          <BIND_TYPE_DATA>
           <CONTENT>

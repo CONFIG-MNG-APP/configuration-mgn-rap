@@ -27,14 +27,17 @@ define view entity ZC_CONF_REQ_I
 
       @UI: { lineItem:       [{ position: 20, importance: #HIGH }],
              identification: [{ position: 30 }] }
+             @Consumption.valueHelpDefinition: [{ entity: { name: 'ZC_CONF_CATALOG', element: 'ConfId' } }]
       ConfId,
 
       @UI: { lineItem:       [{ position: 30, importance: #HIGH }],
              identification: [{ position: 40 }] }
+             @Consumption.valueHelpDefinition: [{ entity: { name: 'ZI_ENV_DEF', element: 'EnvId' } }]
       Action,
 
       @UI: { lineItem:       [{ position: 40 }],
              identification: [{ position: 50 }] }
+             @Consumption.valueHelpDefinition: [{ entity: { name: 'ZI_ENV_DEF', element: 'EnvId' } }]
       TargetEnvId,
 
       @UI: { identification: [{ position: 60 }] }

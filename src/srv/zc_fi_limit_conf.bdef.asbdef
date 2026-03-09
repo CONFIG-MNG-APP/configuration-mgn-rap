@@ -1,0 +1,9 @@
+projection;
+strict;
+
+define behavior for ZC_FI_LIMIT_CONF
+{
+  use create;
+  use update;
+  use delete;
+}

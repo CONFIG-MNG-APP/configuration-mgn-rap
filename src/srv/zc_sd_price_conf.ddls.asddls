@@ -34,6 +34,7 @@ define root view entity ZC_SD_PRICE_CONF
       @UI: { lineItem:       [{ position: 30 }],
              identification: [{ position: 40 }],
              selectionField: [{ position: 10 }] }
+             @Consumption.valueHelpDefinition: [{ entity: { name: 'ZI_ENV_DEF', element: 'EnvId' } }]
       EnvId,
 
       @UI: { lineItem:       [{ position: 40, importance: #HIGH }],

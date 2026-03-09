@@ -1,0 +1,6 @@
+@EndUserText.label: 'Authorization for SD Price Config'
+@MappingRole: true
+define role ZI_SD_PRICE_CONF {
+  grant select on ZI_SD_PRICE_CONF
+  where 1 = 1;
+}

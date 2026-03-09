@@ -10,6 +10,7 @@ authorization master ( instance )
   create;
   update;
   delete;
+
   association _FieldDef { create; }
 
   // User must enter ConfId, cannot change it after creation
@@ -21,6 +22,7 @@ authorization master ( instance )
   // Validations
   validation validateModuleId on save { field ModuleId; create; }
   validation validateTargetTable on save { field TargetCds; create; }
+  validation validateDeleteCatalog on save { create; update; delete; }
 
   mapping for zconfcatalog
   {
@@ -29,7 +31,7 @@ authorization master ( instance )
     ConfName = conf_name;
     ConfType = conf_type;
     Description = description;
-    TargetCds = target_Cds;
+    TargetCds = target_cds;
     IsActive = is_active;
     CreatedBy = created_by;
     CreatedAt = created_at;

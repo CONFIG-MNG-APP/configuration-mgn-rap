@@ -1,4 +1,0 @@
-@EndUserText.label: 'Service Definition for Catalog'
-define service ZUI_CONF_CATALOG {
-  expose ZC_CONF_CATALOG;
-}

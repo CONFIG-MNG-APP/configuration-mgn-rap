@@ -1,0 +1,9 @@
+projection;
+strict ( 2 );
+
+define behavior for ZC_MM_ROUTE_CONF alias RouteConf
+{
+  use create;
+  use update;
+  use delete;
+}

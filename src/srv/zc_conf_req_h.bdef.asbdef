@@ -1,0 +1,23 @@
+projection;
+strict;
+
+define behavior for ZC_CONF_REQ_H
+{
+  use create;
+  use update;
+  use delete;
+
+  use action submit;
+  use action approve;
+  use action reject;
+
+  use association _Items { create; }
+}
+
+define behavior for ZC_CONF_REQ_I
+{
+  use update;
+  use delete;
+
+  use association _Header;
+}

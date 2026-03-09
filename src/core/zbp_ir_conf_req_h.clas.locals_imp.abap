@@ -2,14 +2,21 @@ CLASS lhc_Req DEFINITION INHERITING FROM cl_abap_behavior_handler.
   PRIVATE SECTION.
 
     CONSTANTS:
-      gc_st_draft     TYPE zde_requ_status VALUE 'DRAFT',
-      gc_st_submitted TYPE zde_requ_status VALUE 'SUBMITTED',
-      gc_st_approved  TYPE zde_requ_status VALUE 'APPROVED',
-      gc_st_rejected  TYPE zde_requ_status VALUE 'REJECTED',
-      gc_st_active    TYPE zde_requ_status VALUE 'ACTIVE'.
+      gc_st_draft     TYPE c LENGTH 1 VALUE 'D',
+      gc_st_submitted TYPE c LENGTH 1 VALUE 'S',
+      gc_st_approved  TYPE c LENGTH 1 VALUE 'A',
+      gc_st_rejected  TYPE c LENGTH 1 VALUE 'R'.
+
+    CONSTANTS:
+      gc_role_manager  TYPE c LENGTH 20 VALUE 'MANAGER',
+      gc_role_itadmin  TYPE c LENGTH 20 VALUE 'IT ADMIN',
+      gc_role_keyuser  TYPE c LENGTH 20 VALUE 'KEY USER'.
 
     METHODS get_instance_authorizations FOR INSTANCE AUTHORIZATION
       IMPORTING keys REQUEST requested_authorizations FOR Req RESULT result.
+
+    METHODS get_instance_features FOR INSTANCE FEATURES
+      IMPORTING keys REQUEST requested_features FOR Req RESULT result.
 
     METHODS approve FOR MODIFY
       IMPORTING keys FOR ACTION Req~approve RESULT result.
@@ -31,6 +38,65 @@ ENDCLASS.
 CLASS lhc_Req IMPLEMENTATION.
 
   METHOD get_instance_authorizations.
+  ENDMETHOD.
+
+  METHOD get_instance_features.
+
+    " 1) Read current request data
+    READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
+      ENTITY Req
+        FIELDS ( Status )
+        WITH CORRESPONDING #( keys )
+      RESULT DATA(lt_reqs).
+
+    " 2) Get current user role from ZUSERROLE table
+    DATA lv_role TYPE c LENGTH 20.
+    SELECT SINGLE role_level FROM zuserrole
+      WHERE user_id  = @sy-uname
+        AND is_active = @abap_true
+      INTO @lv_role.
+
+    " 3) Build feature control for each request
+    LOOP AT lt_reqs INTO DATA(ls_req).
+
+      " === EDIT (update) ===
+      " Only when DRAFT
+      DATA(lv_update) = COND #(
+        WHEN ls_req-Status = gc_st_draft
+        THEN if_abap_behv=>fc-o-enabled
+        ELSE if_abap_behv=>fc-o-disabled ).
+
+      " === SUBMIT ===
+      " Only when DRAFT (any user can submit their own request)
+      DATA(lv_submit) = COND #(
+        WHEN ls_req-Status = gc_st_draft
+        THEN if_abap_behv=>fc-o-enabled
+        ELSE if_abap_behv=>fc-o-disabled ).
+
+      " === APPROVE ===
+      " Only when SUBMITTED + user is MANAGER
+      DATA(lv_approve) = COND #(
+        WHEN ls_req-Status = gc_st_submitted AND lv_role = gc_role_manager
+        THEN if_abap_behv=>fc-o-enabled
+        ELSE if_abap_behv=>fc-o-disabled ).
+
+      " === REJECT ===
+      " Only when SUBMITTED + user is MANAGER
+      DATA(lv_reject) = COND #(
+        WHEN ls_req-Status = gc_st_submitted AND lv_role = gc_role_manager
+        THEN if_abap_behv=>fc-o-enabled
+        ELSE if_abap_behv=>fc-o-disabled ).
+
+      APPEND VALUE #(
+        %tky            = ls_req-%tky
+        %update         = lv_update
+        %action-submit  = lv_submit
+        %action-approve = lv_approve
+        %action-reject  = lv_reject
+      ) TO result.
+
+    ENDLOOP.
+
   ENDMETHOD.
 
   METHOD approve.
@@ -63,13 +129,6 @@ CLASS lhc_Req IMPLEMENTATION.
                         Status     = gc_st_approved
                         ApprovedBy = sy-uname
                         ApprovedAt = lv_now ) ).
-
-      "TODO: apply config + audit log
-
-      "ACTIVE
-      MODIFY ENTITIES OF zir_conf_req_h IN LOCAL MODE
-        ENTITY Req UPDATE FIELDS ( Status )
-        WITH VALUE #( ( %tky = <r>-%tky Status = gc_st_active ) ).
 
     ENDLOOP.
 
@@ -188,7 +247,7 @@ CLASS lhc_Req IMPLEMENTATION.
     "1) Header rule: ACTIVE/REJECTED
     LOOP AT reqs ASSIGNING FIELD-SYMBOL(<r>).
 
-      IF <r>-Status = gc_st_active OR <r>-Status = gc_st_rejected.
+      IF <r>-Status = gc_st_approved OR <r>-Status = gc_st_rejected.
 
         APPEND VALUE #(
           %tky = <r>-%tky
@@ -203,7 +262,7 @@ CLASS lhc_Req IMPLEMENTATION.
 
     ENDLOOP.
 
-    "2) Item rule: mandantory ConfId/TargetEnvId/Action
+    "2) Item rule: mandatory ConfId/TargetEnvId/Action
     READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
       ENTITY Req BY \_Items
       ALL FIELDS WITH VALUE #( FOR r IN reqs ( %tky = r-%tky ) )
