@@ -1,18 +1,34 @@
 managed implementation in class ZBP_I_MM_SAFE_STOCK unique;
 strict ( 2 );
+with draft;
 
 define behavior for ZI_MM_SAFE_STOCK alias SafeStock
 persistent table zmmsafestock
+draft table zmmsafestock_d
 lock master
+total etag ChangedAt
 authorization master ( instance )
 etag master ChangedAt
 {
-  field ( readonly ) ItemId, CreatedBy, CreatedAt, ChangedBy, ChangedAt;
+
+  field ( readonly, numbering : managed ) ItemId;
+  field ( readonly ) CreatedBy, CreatedAt, ChangedBy, ChangedAt;
   field ( mandatory ) EnvId, PlantId, MatGroup, MinQty;
 
   create;
   update;
   delete;
+
+
+  draft action Edit;
+  draft action Activate;
+  draft action Discard;
+  draft action Resume;
+
+
+  draft determine action Prepare {
+    validation validateMandatory;
+  }
 
   determination setAdminFields on modify { create; update; }
   validation validateMandatory on save { create; update; }

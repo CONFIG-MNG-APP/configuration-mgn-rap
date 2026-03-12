@@ -45,49 +45,49 @@ annotate entity ZC_MM_ROUTE_CONF
   ]
 
   @UI: {
-    lineItem:       [ { position: 10, label: 'Environment' } ],
+    lineItem:       [ { position: 10, label: 'Environment', importance: #HIGH  } ],
     identification: [ { position: 10, label: 'Environment' } ],
     selectionField: [ { position: 10 } ]
   }
   EnvId;
 
   @UI: {
-    lineItem:       [ { position: 20, label: 'Plant' } ],
+    lineItem:       [ { position: 20, label: 'Plant', importance: #HIGH  } ],
     identification: [ { position: 20, label: 'Plant' } ],
     selectionField: [ { position: 20 } ]
   }
   PlantId;
 
   @UI: {
-    lineItem:       [ { position: 30, label: 'Sending Warehouse' } ],
+    lineItem:       [ { position: 30, label: 'Sending Warehouse', importance: #HIGH  } ],
     fieldGroup:     [ { qualifier: 'ROUTE', position: 10, label: 'Sending Warehouse' } ],
     selectionField: [ { position: 30 } ]
   }
   SendWh;
 
   @UI: {
-    lineItem:       [ { position: 40, label: 'Receiving Warehouse' } ],
+    lineItem:       [ { position: 40, label: 'Receiving Warehouse', importance: #HIGH  } ],
     fieldGroup:     [ { qualifier: 'ROUTE', position: 20, label: 'Receiving Warehouse' } ],
     selectionField: [ { position: 40 } ]
   }
   ReceiveWh;
 
   @UI: {
-    lineItem:       [ { position: 50, label: 'Transport Mode' } ],
+    lineItem:       [ { position: 50, label: 'Transport Mode', importance: #HIGH  } ],
     fieldGroup:     [ { qualifier: 'ROUTE', position: 30, label: 'Transport Mode' } ],
     selectionField: [ { position: 50 } ]
   }
   TransMode;
 
   @UI: {
-    lineItem:       [ { position: 60, label: 'Allowed' } ],
+    lineItem:       [ { position: 60, label: 'Allowed', importance: #HIGH  } ],
     fieldGroup:     [ { qualifier: 'ROUTE', position: 40, label: 'Allowed' } ],
     selectionField: [ { position: 60 } ]
   }
   IsAllowed;
 
   @UI: {
-    lineItem:       [ { position: 70, label: 'Inspector' } ],
+    lineItem:       [ { position: 70, label: 'Inspector', importance: #HIGH  } ],
     fieldGroup:     [ { qualifier: 'ROUTE', position: 50, label: 'Inspector' } ],
     selectionField: [ { position: 70 } ]
   }

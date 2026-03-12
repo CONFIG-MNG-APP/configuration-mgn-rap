@@ -1,5 +1,6 @@
 projection;
 strict;
+use draft;
 
 define behavior for ZC_CONF_REQ_H
 {
@@ -7,11 +8,17 @@ define behavior for ZC_CONF_REQ_H
   use update;
   use delete;
 
+  use action Edit;
+  use action Activate;
+  use action Discard;
+  use action Resume;
+  use action Prepare;
+
   use action submit;
   use action approve;
   use action reject;
 
-  use association _Items { create; }
+  use association _Items { create; with draft; }
 }
 
 define behavior for ZC_CONF_REQ_I
@@ -19,5 +26,5 @@ define behavior for ZC_CONF_REQ_I
   use update;
   use delete;
 
-  use association _Header;
+  use association _Header { with draft; }
 }

@@ -1,9 +1,11 @@
 managed implementation in class ZBP_I_SD_PRICE_CONF unique;
 strict ( 2 );
+with draft;
 
 define behavior for ZI_SD_PRICE_CONF alias PriceConf
-persistent table zsd_price_conf
-lock master
+persistent table zsd_price_req
+draft table zsd_price_conf_d
+lock master total etag ChangedAt
 authorization master ( instance )
 etag master ChangedAt
 {
@@ -14,11 +16,17 @@ etag master ChangedAt
   update;
   delete;
 
+  draft action Edit;
+  draft action Activate;
+  draft action Discard;
+  draft action Resume;
+  draft determine action Prepare;
+
   determination setAdminFields on modify { create; update; }
   validation validateMandatory on save { create; update; }
   validation validateDates on save { create; update; }
 
-  mapping for zsd_price_conf
+  mapping for zsd_price_req
   {
     ItemId      = item_id;
     ReqId       = req_id;

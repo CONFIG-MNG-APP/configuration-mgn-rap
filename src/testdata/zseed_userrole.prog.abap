@@ -14,7 +14,7 @@ APPEND VALUE zuserrole(
   user_id    = sy-uname
   fullname   = 'Current Test User'
   module_id  = 'ALL'
-  role_level = 'MANAGER'
+  role_level = 'IT Admin'
   is_active  = abap_true
   org_access = '*'
 ) TO lt_roles.

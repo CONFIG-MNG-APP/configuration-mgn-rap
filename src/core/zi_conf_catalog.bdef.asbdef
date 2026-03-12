@@ -1,28 +1,36 @@
 managed implementation in class zbp_i_confcatalog unique;
 strict ( 2 );
+with draft;
 
 define behavior for ZI_CONF_CATALOG alias Catalog
 persistent table zconfcatalog
+draft table zconfcatalog_d
 lock master
-authorization master ( instance )
-// etag master <field_name>
+total etag ChangedAt
+authorization master ( instance  )
+etag master ChangedAt
 {
   create;
   update;
   delete;
 
-  association _FieldDef { create; }
+  association _FieldDef { create; with draft; }
 
-  // User must enter ConfId, cannot change it after creation
-  field ( mandatory : create, readonly : update ) ConfId;
-
-  // Read-only Admin Data
+  field ( readonly, numbering : managed ) ConfId;
   field ( readonly ) CreatedBy, CreatedAt, ChangedBy, ChangedAt;
 
-  // Validations
-  validation validateModuleId on save { field ModuleId; create; }
-  validation validateTargetTable on save { field TargetCds; create; }
-  validation validateDeleteCatalog on save { create; update; delete; }
+  draft action Edit;
+  draft action Activate;
+  draft action Discard;
+  draft action Resume;
+  draft determine action Prepare
+  {
+    validation validateModuleId;
+    validation validateTargetTable;
+  }
+
+  validation validateModuleId on save { create; update; field ModuleId; }
+  validation validateTargetTable on save { create; update; field TargetCds; }
 
   mapping for zconfcatalog
   {
@@ -42,14 +50,17 @@ authorization master ( instance )
 
 define behavior for ZI_CONF_FIELD_DEF alias FieldDef
 persistent table zconffielddef
+draft table zconffielddef_d
 lock dependent by _Catalog
 authorization dependent by _Catalog
-// etag master <field_name>
+etag dependent by _Catalog
 {
   update;
   delete;
+
   field ( readonly ) ConfId;
-  association _Catalog;
+
+  association _Catalog { with draft; }
 
   mapping for zconffielddef
   {

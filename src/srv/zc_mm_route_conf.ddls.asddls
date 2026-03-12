@@ -1,14 +1,14 @@
 @AccessControl.authorizationCheck: #NOT_REQUIRED
 @EndUserText.label: 'MM Route Configuration Projection'
 @Metadata.allowExtensions: true
+@Search.searchable: true
 
 define root view entity ZC_MM_ROUTE_CONF
   provider contract transactional_query
   as projection on ZI_MM_ROUTE_CONF
 {
+  key ReqId,
   key ItemId,
-
-      ReqId,
 
       @EndUserText.label: 'Environment'
       EnvId,

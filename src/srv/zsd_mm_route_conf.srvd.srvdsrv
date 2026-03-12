@@ -1,4 +1,6 @@
 @EndUserText.label: 'Service Definition for MM Route Config'
 define service ZSD_MM_ROUTE_CONF {
   expose ZC_MM_ROUTE_CONF as MMRouteConf;
+  expose ZC_ENV_DEF as EnvDef;
+  expose ZC_PLANT_UNIT as PlantUnit;
 }

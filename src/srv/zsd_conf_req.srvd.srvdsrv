@@ -1,0 +1,5 @@
+@EndUserText.label: 'Service Definition for Request Config'
+define service ZSD_conf_req {
+  expose ZC_CONF_REQ_H;
+  expose ZC_CONF_REQ_I;
+}

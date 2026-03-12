@@ -3,7 +3,7 @@
 @EndUserText.label: 'Interface View - Price Configuration'
 @Metadata.ignorePropagatedAnnotations: true
 define root view entity ZI_SD_PRICE_CONF
-  as select from zsd_price_conf
+  as select from zsd_price_req
 {
   key item_id       as ItemId,
       req_id        as ReqId,

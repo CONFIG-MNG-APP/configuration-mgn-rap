@@ -69,7 +69,6 @@ annotate entity ZC_CONF_CATALOG with
   TargetCds;
 
   @UI: {
-  lineItem: [{ position: 50, importance: #HIGH, label: 'Active', criticality: 'ActiveCriticality' }],
   identification: [{ position: 70, label: 'Active' }]
   }
   IsActive;

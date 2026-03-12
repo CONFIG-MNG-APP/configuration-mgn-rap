@@ -1,0 +1,4 @@
+@EndUserText.label: 'Service Definition for MM Safe Stock'
+define service ZSD_MM_SAFE_STOCK {
+  expose ZC_MM_SAFE_STOCK as MMSafeStock;
+}

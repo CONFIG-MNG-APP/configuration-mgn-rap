@@ -1,9 +1,12 @@
 managed implementation in class zbp_i_mm_route_conf unique;
 strict ( 2 );
+with draft;
 
 define behavior for ZI_MM_ROUTE_CONF alias RouteConf
-persistent table zmmrouteconf
+persistent table zmmrouteconf_req
+draft table zmmrouteroot_d
 lock master
+total etag ChangedAt
 authorization master ( global )
 etag master ChangedAt
 {
@@ -19,22 +22,31 @@ etag master ChangedAt
   validation validate_mandatory on save { create; update; }
   validation validate_business   on save { create; update; }
 
-  mapping for zmmrouteconf
-  {
-    ItemId      = item_id;
-    ReqId       = req_id;
-    EnvId       = env_id;
-    PlantId     = plant_id;
-    SendWh      = send_wh;
-    ReceiveWh   = receive_wh;
-    InspectorId = inspector_id;
-    TransMode   = trans_mode;
-    IsAllowed   = is_allowed;
-    VersionNo   = version_no;
+  draft action Edit;
+  draft action Activate;
+  draft action Discard;
+  draft action Resume;
+  draft determine action Prepare;
 
-    CreatedBy   = created_by;
-    CreatedAt   = created_at;
-    ChangedBy   = changed_by;
-    ChangedAt   = changed_at;
+  mapping for zmmrouteconf_req
+  {
+    ItemId       = item_id;
+    ReqId        = req_id;
+    SourceItemId = source_item_id;
+    ActionType   = action_type;
+
+    EnvId        = env_id;
+    PlantId      = plant_id;
+    SendWh       = send_wh;
+    ReceiveWh    = receive_wh;
+    InspectorId  = inspector_id;
+    TransMode    = trans_mode;
+    IsAllowed    = is_allowed;
+    VersionNo    = version_no;
+
+    CreatedBy    = created_by;
+    CreatedAt    = created_at;
+    ChangedBy    = changed_by;
+    ChangedAt    = changed_at;
   }
 }

@@ -3,7 +3,7 @@
 {
 "FROM":
 [
-"ZSD_PRICE_CONF"
+"ZSD_PRICE_REQ"
 ],
 "ASSOCIATED":
 [],

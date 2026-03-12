@@ -6,7 +6,7 @@ define root view entity ZIR_CONF_REQ_H
 
   composition [0..*] of ZI_CONF_REQ_I as _Items
 
-  association [0..1] to ZI_ENV_DEF     as _Env on $projection.EnvId  = _Env.EnvId
+  association [0..1] to ZI_ENV_DEF    as _Env on $projection.EnvId = _Env.EnvId
 {
 
   key req_id      as ReqId,
@@ -17,17 +17,6 @@ define root view entity ZIR_CONF_REQ_H
       description as Description,
       status      as Status,
       reason      as Reason,
-
-             /* Status Criticality for UI coloring */
-      case status
-        when 'D' then 0   -- Draft (Grey)
-        when 'S' then 2   -- Submitted (Yellow)
-        when 'A' then 3   -- Approved/Active (Green)
-        when 'R' then 1   -- Rejected (Red)
-        else 0
-      end               as StatusCriticality,
-
-
 
       /* Admin */
       @Semantics.user.createdBy: true
@@ -44,7 +33,7 @@ define root view entity ZIR_CONF_REQ_H
 
       approved_by as ApprovedBy,
       approved_at as ApprovedAt,
-      
+
       rejected_by as RejectedBy,
       rejected_at as RejectedAt,
 

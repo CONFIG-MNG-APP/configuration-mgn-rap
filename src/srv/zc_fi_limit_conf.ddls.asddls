@@ -10,6 +10,7 @@
 }
 
 define root view entity ZC_FI_LIMIT_CONF
+provider contract transactional_query
   as projection on ZI_FI_LIMIT_CONF
 {
       @UI.facet: [

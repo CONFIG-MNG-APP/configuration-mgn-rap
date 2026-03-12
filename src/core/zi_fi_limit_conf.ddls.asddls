@@ -3,7 +3,7 @@
 @EndUserText.label: 'FI Expense Limit Configuration'
 @Metadata.ignorePropagatedAnnotations: true
 define root view entity ZI_FI_LIMIT_CONF
-  as select from zfilimitconf
+  as select from zfilimitreq
 {
   key item_id       as ItemId,
       req_id        as ReqId,

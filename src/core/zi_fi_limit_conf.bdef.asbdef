@@ -1,23 +1,32 @@
 managed implementation in class ZBP_I_FI_LIMIT_CONF unique;
 strict ( 2 );
+with draft;
 
 define behavior for ZI_FI_LIMIT_CONF alias LimitConf
-persistent table zfilimitconf
-lock master
+persistent table zfilimitreq
+draft table zfi_limit_d
+lock master total etag ChangedAt
 authorization master ( instance )
 etag master ChangedAt
 {
-  field ( readonly ) ItemId, CreatedBy, CreatedAt, ChangedBy, ChangedAt;
+  field ( readonly ) CreatedBy, CreatedAt, ChangedBy, ChangedAt;
+  field ( numbering: managed, readonly ) ItemId;
   field ( mandatory ) EnvId, ExpenseType, GlAccount, AutoApprLim;
 
   create;
   update;
   delete;
 
+  draft action Edit;
+  draft action Activate;
+  draft action Discard;
+  draft action Resume;
+  draft determine action Prepare;
+
   determination setAdminFields on modify { create; update; }
   validation validateMandatory on save { create; update; }
 
-  mapping for zfilimitconf
+  mapping for zfilimitreq
   {
     ItemId      = item_id;
     ReqId       = req_id;

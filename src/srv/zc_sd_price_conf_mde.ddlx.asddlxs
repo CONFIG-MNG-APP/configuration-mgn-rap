@@ -1,0 +1,144 @@
+@Metadata.layer: #CORE
+
+@UI: {
+  headerInfo: {
+    typeName: 'Price Rule',
+    typeNamePlural: 'Price Rules',
+    title: {
+      type: #STANDARD,
+      label: 'Customer Group',
+      value: 'CustGroup'
+    },
+    description: {
+      value: 'MaterialGrp'
+    }
+  }
+}
+
+annotate entity ZC_SD_PRICE_CONF
+  with
+{
+  @UI.facet: [
+    {
+      id: 'GeneralInfo',
+      purpose: #STANDARD,
+      type: #IDENTIFICATION_REFERENCE,
+      label: 'General Information',
+      position: 10
+    },
+    {
+      id: 'PricingDetails',
+      purpose: #STANDARD,
+      type: #FIELDGROUP_REFERENCE,
+      label: 'Pricing Details',
+      targetQualifier: 'PRICING',
+      position: 20
+    },
+    {
+      id: 'AdminInfo',
+      purpose: #STANDARD,
+      type: #FIELDGROUP_REFERENCE,
+      label: 'Administration',
+      targetQualifier: 'ADMIN',
+      position: 30
+    }
+  ]
+
+  @UI: {
+    lineItem:       [ { position: 10, importance: #HIGH } ],
+    identification: [ { position: 10 } ]
+  }
+  ItemId;
+
+  @UI: {
+    lineItem:       [ { position: 20, label: 'Environment' } ],
+    identification: [ { position: 20, label: 'Environment' } ],
+    selectionField: [ { position: 10 } ]
+  }
+  EnvId;
+
+  @UI: {
+    lineItem:       [ { position: 30, label: 'Branch' } ],
+    identification: [ { position: 30, label: 'Branch' } ],
+    selectionField: [ { position: 20 } ]
+  }
+  BranchId;
+
+  @UI: {
+    lineItem:       [ { position: 40, importance: #HIGH, label: 'Customer Group' } ],
+    identification: [ { position: 40, label: 'Customer Group' } ],
+    selectionField: [ { position: 30 } ]
+  }
+  CustGroup;
+
+  @UI: {
+    lineItem:       [ { position: 50, importance: #HIGH, label: 'Material Group' } ],
+    fieldGroup:     [ { qualifier: 'PRICING', position: 10, label: 'Material Group' } ]
+  }
+  MaterialGrp;
+
+  @UI: {
+    lineItem:       [ { position: 60, importance: #HIGH, label: 'Max Discount' } ],
+    fieldGroup:     [ { qualifier: 'PRICING', position: 20, label: 'Max Discount' } ]
+  }
+  MaxDiscount;
+
+  @UI: {
+    fieldGroup:     [ { qualifier: 'PRICING', position: 30, label: 'Min Order Value' } ]
+  }
+  MinOrderVal;
+
+  @UI: {
+    fieldGroup:     [ { qualifier: 'PRICING', position: 40, label: 'Approver Group' } ]
+  }
+  ApproverGrp;
+
+  @UI: {
+    lineItem:       [ { position: 70, label: 'Currency' } ],
+    fieldGroup:     [ { qualifier: 'PRICING', position: 50, label: 'Currency' } ]
+  }
+  Currency;
+
+  @UI: {
+    fieldGroup:     [ { qualifier: 'PRICING', position: 60, label: 'Valid From' } ]
+  }
+  ValidFrom;
+
+  @UI: {
+    fieldGroup:     [ { qualifier: 'PRICING', position: 70, label: 'Valid To' } ]
+  }
+  ValidTo;
+
+  @UI: {
+    lineItem:   [ { position: 80, label: 'Version' } ],
+    fieldGroup: [ { qualifier: 'ADMIN', position: 10, label: 'Version' } ]
+  }
+  VersionNo;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'ADMIN', position: 20, label: 'Request ID' } ]
+  }
+  ReqId;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'ADMIN', position: 30, label: 'Created By' } ]
+  }
+  CreatedBy;
+
+  @UI: {
+    lineItem:   [ { position: 90, label: 'Created At' } ],
+    fieldGroup: [ { qualifier: 'ADMIN', position: 40, label: 'Created At' } ]
+  }
+  CreatedAt;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'ADMIN', position: 50, label: 'Changed By' } ]
+  }
+  ChangedBy;
+
+  @UI: {
+    lineItem:   [ { position: 100, label: 'Changed At' } ],
+    fieldGroup: [ { qualifier: 'ADMIN', position: 60, label: 'Changed At' } ]
+  }
+  ChangedAt;
+}

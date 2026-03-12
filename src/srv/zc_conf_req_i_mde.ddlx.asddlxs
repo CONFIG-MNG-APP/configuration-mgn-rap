@@ -1,0 +1,41 @@
+@Metadata.layer: #CORE
+
+@UI.headerInfo: {
+  typeName: 'Request Item',
+  typeNamePlural: 'Request Items'
+}
+
+annotate view ZC_CONF_REQ_I with
+{
+  @UI.facet: [
+    {
+      id: 'ItemDetail',
+      purpose: #STANDARD,
+      type: #IDENTIFICATION_REFERENCE,
+      label: 'Item Details',
+      position: 10
+    }
+  ]
+
+  @UI.lineItem: [{ position: 10, importance: #HIGH, label: 'Config' }]
+  @UI.identification: [{ position: 10, label: 'Config' }]
+  @Consumption.valueHelpDefinition: [{ entity: { name: 'ZC_CONF_CATALOG', element: 'ConfId' } }]
+  ConfId;
+
+  @UI.lineItem: [{ position: 20, importance: #HIGH, label: 'Action' }]
+  @UI.identification: [{ position: 20, label: 'Action' }]
+  Action;
+
+  @UI.lineItem: [{ position: 30, importance: #HIGH, label: 'Target Environment' }]
+  @UI.identification: [{ position: 30, label: 'Target Environment' }]
+  @Consumption.valueHelpDefinition: [{ entity: { name: 'ZC_ENV_DEF', element: 'EnvId' } }]
+  TargetEnvId;
+
+  @UI.lineItem: [{ position: 40, label: 'Notes' }]
+  @UI.identification: [{ position: 40, label: 'Notes' }]
+  Notes;
+
+  @UI.lineItem: [{ position: 50, label: 'Version No' }]
+  @UI.identification: [{ position: 50, label: 'Version No' }]
+  VersionNo;
+}

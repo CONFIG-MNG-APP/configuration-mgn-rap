@@ -2,7 +2,6 @@
 @EndUserText.label: 'Config Catalog Projection'
 @Metadata.allowExtensions: true
 @Search.searchable: true
-
 define root view entity ZC_CONF_CATALOG
   provider contract transactional_query
   as projection on ZI_CONF_CATALOG
@@ -24,12 +23,8 @@ define root view entity ZC_CONF_CATALOG
 
       @Search.defaultSearchElement: true
       TargetCds,
-      
-      SemanticObject,
-      SemanticAction,
 
       IsActive,
-      ActiveCriticality,
       CreatedBy,
       CreatedAt,
       ChangedBy,
