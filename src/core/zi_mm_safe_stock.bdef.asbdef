@@ -3,7 +3,7 @@ strict ( 2 );
 with draft;
 
 define behavior for ZI_MM_SAFE_STOCK alias SafeStock
-persistent table zmmsafestock
+persistent table zmmsafestock_req
 draft table zmmsafestock_d
 lock master
 total etag ChangedAt
@@ -11,10 +11,20 @@ authorization master ( instance )
 etag master ChangedAt
 {
 
-  field ( readonly, numbering : managed ) ItemId;
-  field ( readonly ) CreatedBy, CreatedAt, ChangedBy, ChangedAt;
-  field ( mandatory ) EnvId, PlantId, MatGroup, MinQty;
+  field ( readonly ) ReqId, ReqItemId;
+field ( readonly, numbering : managed ) ItemId;
 
+field ( readonly )
+  OldEnvId,
+  OldPlantId,
+  OldMatGroup,
+  OldMinQty,
+  OldVersionNo;
+
+field ( readonly )
+  CreatedBy, CreatedAt, ChangedBy, ChangedAt, VersionNo;
+
+field ( mandatory ) EnvId, PlantId, MatGroup, MinQty;
   create;
   update;
   delete;
@@ -30,21 +40,37 @@ etag master ChangedAt
     validation validateMandatory;
   }
 
-  determination setAdminFields on modify { create; update; }
   validation validateMandatory on save { create; update; }
 
-  mapping for zmmsafestock
+  mapping for zmmsafestock_req
   {
-    ItemId    = item_id;
-    ReqId     = req_id;
-    EnvId     = env_id;
-    PlantId   = plant_id;
-    MatGroup  = mat_group;
-    MinQty    = min_qty;
-    VersionNo = version_no;
-    CreatedBy = created_by;
-    CreatedAt = created_at;
-    ChangedBy = changed_by;
-    ChangedAt = changed_at;
+    ReqId        = req_id;
+  ReqItemId    = req_item_id;
+  ItemId       = item_id;
+
+  SourceItemId = source_item_id;
+  ConfId       = conf_id;
+  ActionType   = action_type;
+
+  EnvId        = env_id;
+  PlantId      = plant_id;
+  MatGroup     = mat_group;
+  MinQty       = min_qty;
+
+  VersionNo    = version_no;
+
+  OldEnvId     = old_env_id;
+  OldPlantId   = old_plant_id;
+  OldMatGroup  = old_mat_group;
+  OldMinQty    = old_min_qty;
+  OldVersionNo = old_version_no;
+
+  LineStatus   = line_status;
+  ChangeNote   = change_note;
+
+  CreatedBy    = created_by;
+  CreatedAt    = created_at;
+  ChangedBy    = changed_by;
+  ChangedAt    = changed_at;
   }
 }

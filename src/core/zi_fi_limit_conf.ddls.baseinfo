@@ -6,7 +6,9 @@
 "ZFILIMITREQ"
 ],
 "ASSOCIATED":
-[],
+[
+"ZI_ENV_DEF"
+],
 "BASE":
 [],
 "ANNO_REF":

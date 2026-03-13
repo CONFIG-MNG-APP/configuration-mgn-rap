@@ -8,7 +8,12 @@ define root view entity ZC_MM_ROUTE_CONF
   as projection on ZI_MM_ROUTE_CONF
 {
   key ReqId,
+  key ReqItemId,
   key ItemId,
+
+      SourceItemId,
+      ConfId,
+      ActionType,
 
       @EndUserText.label: 'Environment'
       EnvId,
@@ -43,17 +48,29 @@ define root view entity ZC_MM_ROUTE_CONF
       @EndUserText.label: 'Version'
       VersionNo,
 
-      @EndUserText.label: 'Created By'
+      @EndUserText.label: 'Line Status'
+      LineStatus,
+
+      @EndUserText.label: 'Change Note'
+      ChangeNote,
+
+      // Compare fields
+      OldEnvId,
+      OldPlantId,
+      OldSendWh,
+      OldReceiveWh,
+      OldInspectorId,
+      OldTransMode,
+      OldIsAllowed,
+      OldVersionNo,
+
       CreatedBy,
-
-      @EndUserText.label: 'Created At'
       CreatedAt,
-
-      @EndUserText.label: 'Changed By'
       ChangedBy,
-
-      @EndUserText.label: 'Changed At'
       ChangedAt,
+
       _Env,
-      _Plant
+      _Plant,
+      _OldEnv,
+      _OldPlant
 }

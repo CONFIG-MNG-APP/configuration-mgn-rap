@@ -2,21 +2,19 @@
 
 @UI: {
   headerInfo: {
-    typeName: 'Price Rule',
-    typeNamePlural: 'Price Rules',
+    typeName: 'SD Price Request Line',
+    typeNamePlural: 'SD Price Request Lines',
     title: {
       type: #STANDARD,
       label: 'Customer Group',
       value: 'CustGroup'
     },
     description: {
-      value: 'MaterialGrp'
+      value: 'ActionType'
     }
   }
 }
-
-annotate entity ZC_SD_PRICE_CONF
-  with
+annotate entity ZC_SD_PRICE_CONF with
 {
   @UI.facet: [
     {
@@ -27,12 +25,20 @@ annotate entity ZC_SD_PRICE_CONF
       position: 10
     },
     {
-      id: 'PricingDetails',
+      id: 'CurrentValues',
       purpose: #STANDARD,
       type: #FIELDGROUP_REFERENCE,
-      label: 'Pricing Details',
-      targetQualifier: 'PRICING',
+      label: 'Current Values',
+      targetQualifier: 'CURRENT',
       position: 20
+    },
+    {
+      id: 'OldValues',
+      purpose: #STANDARD,
+      type: #FIELDGROUP_REFERENCE,
+      label: 'Old Values',
+      targetQualifier: 'OLD',
+      position: 30
     },
     {
       id: 'AdminInfo',
@@ -40,105 +46,194 @@ annotate entity ZC_SD_PRICE_CONF
       type: #FIELDGROUP_REFERENCE,
       label: 'Administration',
       targetQualifier: 'ADMIN',
-      position: 30
+      position: 40
     }
   ]
 
   @UI: {
-    lineItem:       [ { position: 10, importance: #HIGH } ],
-    identification: [ { position: 10 } ]
+    lineItem:       [ { position: 10, label: 'Action', importance: #HIGH } ],
+    identification: [ { position: 10, label: 'Action' } ]
   }
-  ItemId;
+  actiontype;
 
   @UI: {
-    lineItem:       [ { position: 20, label: 'Environment' } ],
+    lineItem:       [ { position: 20, label: 'Environment', importance: #HIGH } ],
     identification: [ { position: 20, label: 'Environment' } ],
-    selectionField: [ { position: 10 } ]
+    selectionField: [ { position: 10 } ],
+    fieldGroup:     [ { qualifier: 'CURRENT', position: 10, label: 'Environment' } ]
   }
   EnvId;
 
   @UI: {
-    lineItem:       [ { position: 30, label: 'Branch' } ],
+    lineItem:       [ { position: 30, label: 'Branch', importance: #HIGH } ],
     identification: [ { position: 30, label: 'Branch' } ],
-    selectionField: [ { position: 20 } ]
+    selectionField: [ { position: 20 } ],
+    fieldGroup:     [ { qualifier: 'CURRENT', position: 20, label: 'Branch' } ]
   }
   BranchId;
 
   @UI: {
-    lineItem:       [ { position: 40, importance: #HIGH, label: 'Customer Group' } ],
+    lineItem:       [ { position: 40, label: 'Customer Group', importance: #HIGH } ],
     identification: [ { position: 40, label: 'Customer Group' } ],
-    selectionField: [ { position: 30 } ]
+    selectionField: [ { position: 30 } ],
+    fieldGroup:     [ { qualifier: 'CURRENT', position: 30, label: 'Customer Group' } ]
   }
   CustGroup;
 
   @UI: {
-    lineItem:       [ { position: 50, importance: #HIGH, label: 'Material Group' } ],
-    fieldGroup:     [ { qualifier: 'PRICING', position: 10, label: 'Material Group' } ]
+    lineItem:       [ { position: 50, label: 'Material Group', importance: #HIGH } ],
+    fieldGroup:     [ { qualifier: 'CURRENT', position: 40, label: 'Material Group' } ]
   }
   MaterialGrp;
 
   @UI: {
-    lineItem:       [ { position: 60, importance: #HIGH, label: 'Max Discount' } ],
-    fieldGroup:     [ { qualifier: 'PRICING', position: 20, label: 'Max Discount' } ]
+    lineItem:       [ { position: 60, label: 'Max Discount', importance: #HIGH } ],
+    fieldGroup:     [ { qualifier: 'CURRENT', position: 50, label: 'Max Discount' } ]
   }
   MaxDiscount;
 
   @UI: {
-    fieldGroup:     [ { qualifier: 'PRICING', position: 30, label: 'Min Order Value' } ]
+    fieldGroup: [ { qualifier: 'CURRENT', position: 60, label: 'Min Order Value' } ]
   }
   MinOrderVal;
 
   @UI: {
-    fieldGroup:     [ { qualifier: 'PRICING', position: 40, label: 'Approver Group' } ]
+    fieldGroup: [ { qualifier: 'CURRENT', position: 70, label: 'Approver Group' } ]
   }
   ApproverGrp;
 
   @UI: {
-    lineItem:       [ { position: 70, label: 'Currency' } ],
-    fieldGroup:     [ { qualifier: 'PRICING', position: 50, label: 'Currency' } ]
+    lineItem:   [ { position: 70, label: 'Currency' } ],
+    fieldGroup: [ { qualifier: 'CURRENT', position: 80, label: 'Currency' } ]
   }
   Currency;
 
   @UI: {
-    fieldGroup:     [ { qualifier: 'PRICING', position: 60, label: 'Valid From' } ]
+    fieldGroup: [ { qualifier: 'CURRENT', position: 90, label: 'Valid From' } ]
   }
   ValidFrom;
 
   @UI: {
-    fieldGroup:     [ { qualifier: 'PRICING', position: 70, label: 'Valid To' } ]
+    fieldGroup: [ { qualifier: 'CURRENT', position: 100, label: 'Valid To' } ]
   }
   ValidTo;
 
   @UI: {
-    lineItem:   [ { position: 80, label: 'Version' } ],
-    fieldGroup: [ { qualifier: 'ADMIN', position: 10, label: 'Version' } ]
+    lineItem:   [ { position: 80, label: 'Line Status' } ],
+    fieldGroup: [ { qualifier: 'CURRENT', position: 110, label: 'Line Status' } ]
   }
-  VersionNo;
+  linestatus;
 
   @UI: {
-    fieldGroup: [ { qualifier: 'ADMIN', position: 20, label: 'Request ID' } ]
+    fieldGroup: [ { qualifier: 'CURRENT', position: 120, label: 'Change Note' } ]
+  }
+  changenote;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'OLD', position: 10, label: 'Old Environment' } ]
+  }
+  oldenvid;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'OLD', position: 20, label: 'Old Branch' } ]
+  }
+  oldbranchid;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'OLD', position: 30, label: 'Old Customer Group' } ]
+  }
+  oldcustgroup;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'OLD', position: 40, label: 'Old Material Group' } ]
+  }
+  oldmaterialgrp;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'OLD', position: 50, label: 'Old Max Discount' } ]
+  }
+  oldmaxdiscount;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'OLD', position: 60, label: 'Old Min Order Value' } ]
+  }
+  oldminorderval;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'OLD', position: 70, label: 'Old Approver Group' } ]
+  }
+  oldapprovergrp;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'OLD', position: 80, label: 'Old Currency' } ]
+  }
+  oldcurrency;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'OLD', position: 90, label: 'Old Valid From' } ]
+  }
+  oldvalidfrom;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'OLD', position: 100, label: 'Old Valid To' } ]
+  }
+  oldvalidto;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'OLD', position: 110, label: 'Old Version' } ]
+  }
+  oldversionno;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'ADMIN', position: 10, label: 'Request ID' } ]
   }
   ReqId;
 
   @UI: {
-    fieldGroup: [ { qualifier: 'ADMIN', position: 30, label: 'Created By' } ]
+    fieldGroup: [ { qualifier: 'ADMIN', position: 20, label: 'Request Item ID' } ]
+  }
+  reqitemid;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'ADMIN', position: 30, label: 'Item ID' } ]
+  }
+  ItemId;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'ADMIN', position: 40, label: 'Source Item ID' } ]
+  }
+  sourceitemid;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'ADMIN', position: 50, label: 'Config ID' } ]
+  }
+  confid;
+
+  @UI: {
+    lineItem:   [ { position: 90, label: 'Version' } ],
+    fieldGroup: [ { qualifier: 'ADMIN', position: 60, label: 'Version' } ]
+  }
+  VersionNo;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'ADMIN', position: 70, label: 'Created By' } ]
   }
   CreatedBy;
 
   @UI: {
-    lineItem:   [ { position: 90, label: 'Created At' } ],
-    fieldGroup: [ { qualifier: 'ADMIN', position: 40, label: 'Created At' } ]
+    lineItem:   [ { position: 100, label: 'Created At' } ],
+    fieldGroup: [ { qualifier: 'ADMIN', position: 80, label: 'Created At' } ]
   }
   CreatedAt;
 
   @UI: {
-    fieldGroup: [ { qualifier: 'ADMIN', position: 50, label: 'Changed By' } ]
+    fieldGroup: [ { qualifier: 'ADMIN', position: 90, label: 'Changed By' } ]
   }
   ChangedBy;
 
   @UI: {
-    lineItem:   [ { position: 100, label: 'Changed At' } ],
-    fieldGroup: [ { qualifier: 'ADMIN', position: 60, label: 'Changed At' } ]
+    lineItem:   [ { position: 110, label: 'Changed At' } ],
+    fieldGroup: [ { qualifier: 'ADMIN', position: 100, label: 'Changed At' } ]
   }
   ChangedAt;
 }

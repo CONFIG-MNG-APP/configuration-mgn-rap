@@ -6,9 +6,13 @@
 "ZI_SD_PRICE_CONF"
 ],
 "ASSOCIATED":
-[],
+[
+"ZI_ENV_DEF"
+],
 "BASE":
-[],
+[
+"ZI_SD_PRICE_CONF"
+],
 "ANNO_REF":
 [],
 "SCALAR_FUNCTION":

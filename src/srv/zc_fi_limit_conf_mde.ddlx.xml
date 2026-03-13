@@ -4,8 +4,8 @@
   <asx:values>
    <DDLX>
     <METADATA>
-     <NAME>ZC_MM_ROUTE_REQ</NAME>
-     <DESCRIPTION>Metadata Extension for Route Request UI</DESCRIPTION>
+     <NAME>ZC_FI_LIMIT_CONF_MDE</NAME>
+     <DESCRIPTION>Metadata extension for FI Limit Config</DESCRIPTION>
      <MASTER_LANGUAGE>EN</MASTER_LANGUAGE>
     </METADATA>
    </DDLX>

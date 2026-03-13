@@ -6,7 +6,9 @@
 "ZSD_PRICE_REQ"
 ],
 "ASSOCIATED":
-[],
+[
+"ZI_ENV_DEF"
+],
 "BASE":
 [],
 "ANNO_REF":

@@ -6,9 +6,13 @@
 "ZI_MM_SAFE_STOCK"
 ],
 "ASSOCIATED":
-[],
+[
+"ZI_ENV_DEF"
+],
 "BASE":
-[],
+[
+"ZI_MM_SAFE_STOCK"
+],
 "ANNO_REF":
 [],
 "SCALAR_FUNCTION":

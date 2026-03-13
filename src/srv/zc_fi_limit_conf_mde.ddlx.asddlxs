@@ -2,19 +2,19 @@
 
 @UI: {
   headerInfo: {
-    typeName: 'MM Safe Stock Request Line',
-    typeNamePlural: 'MM Safe Stock Request Lines',
+    typeName: 'FI Limit Request Line',
+    typeNamePlural: 'FI Limit Request Lines',
     title: {
       type: #STANDARD,
-      label: 'Plant',
-      value: 'PlantId'
+      label: 'Expense Type',
+      value: 'ExpenseType'
     },
     description: {
       value: 'ActionType'
     }
   }
 }
-annotate entity ZC_MM_SAFE_STOCK with
+annotate entity ZC_FI_LIMIT_CONF with
 {
   @UI.facet: [
     {
@@ -54,75 +54,86 @@ annotate entity ZC_MM_SAFE_STOCK with
     lineItem:       [ { position: 10, label: 'Action', importance: #HIGH } ],
     identification: [ { position: 10, label: 'Action' } ]
   }
-  actiontype;
+  ActionType;
 
   @UI: {
-    lineItem:       [ { position: 20, label: 'Environment', importance: #HIGH } ],
-    identification: [ { position: 20, label: 'Environment' } ],
+    lineItem:       [ { position: 20, importance: #HIGH } ],
+    identification: [ { position: 20 } ],
     selectionField: [ { position: 10 } ],
     fieldGroup:     [ { qualifier: 'CURRENT', position: 10, label: 'Environment' } ]
   }
   EnvId;
 
   @UI: {
-    lineItem:       [ { position: 30, label: 'Plant', importance: #HIGH } ],
-    identification: [ { position: 30, label: 'Plant' } ],
+    lineItem:       [ { position: 30, importance: #HIGH } ],
+    identification: [ { position: 30 } ],
     selectionField: [ { position: 20 } ],
-    fieldGroup:     [ { qualifier: 'CURRENT', position: 20, label: 'Plant' } ]
+    fieldGroup:     [ { qualifier: 'CURRENT', position: 20, label: 'Expense Type' } ]
   }
-  PlantId;
+  ExpenseType;
 
   @UI: {
-    lineItem:       [ { position: 40, label: 'Material Group', importance: #HIGH } ],
-    identification: [ { position: 40, label: 'Material Group' } ],
+    lineItem:       [ { position: 40, importance: #HIGH } ],
+    identification: [ { position: 40 } ],
     selectionField: [ { position: 30 } ],
-    fieldGroup:     [ { qualifier: 'CURRENT', position: 30, label: 'Material Group' } ]
+    fieldGroup:     [ { qualifier: 'CURRENT', position: 30, label: 'G/L Account' } ]
   }
-  MatGroup;
+  GlAccount;
 
   @UI: {
-    lineItem:       [ { position: 50, label: 'Minimum Quantity', importance: #HIGH } ],
-    identification: [ { position: 50, label: 'Minimum Quantity' } ],
-    selectionField: [ { position: 40 } ],
-    fieldGroup:     [ { qualifier: 'CURRENT', position: 40, label: 'Minimum Quantity' } ]
+    lineItem:       [ { position: 50, importance: #HIGH } ],
+    identification: [ { position: 50 } ],
+    fieldGroup:     [ { qualifier: 'CURRENT', position: 40, label: 'Auto Approval Limit' } ]
   }
-  MinQty;
+  AutoApprLim;
 
   @UI: {
-    lineItem:   [ { position: 60, label: 'Line Status' } ],
-    fieldGroup: [ { qualifier: 'CURRENT', position: 50, label: 'Line Status' } ]
+    lineItem:       [ { position: 60 } ],
+    identification: [ { position: 60 } ],
+    fieldGroup:     [ { qualifier: 'CURRENT', position: 50, label: 'Currency' } ]
   }
-  linestatus;
+  Currency;
 
   @UI: {
-    fieldGroup: [ { qualifier: 'CURRENT', position: 60, label: 'Change Note' } ]
+    lineItem:   [ { position: 70 } ],
+    fieldGroup: [ { qualifier: 'CURRENT', position: 60, label: 'Line Status' } ]
   }
-  changenote;
+  LineStatus;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'CURRENT', position: 70, label: 'Change Note' } ]
+  }
+  ChangeNote;
 
   @UI: {
     fieldGroup: [ { qualifier: 'OLD', position: 10, label: 'Old Environment' } ]
   }
-  oldenvid;
+  OldEnvId;
 
   @UI: {
-    fieldGroup: [ { qualifier: 'OLD', position: 20, label: 'Old Plant' } ]
+    fieldGroup: [ { qualifier: 'OLD', position: 20, label: 'Old Expense Type' } ]
   }
-  oldplantid;
+  OldExpenseType;
 
   @UI: {
-    fieldGroup: [ { qualifier: 'OLD', position: 30, label: 'Old Material Group' } ]
+    fieldGroup: [ { qualifier: 'OLD', position: 30, label: 'Old G/L Account' } ]
   }
-  oldmatgroup;
+  OldGlAccount;
 
   @UI: {
-    fieldGroup: [ { qualifier: 'OLD', position: 40, label: 'Old Minimum Quantity' } ]
+    fieldGroup: [ { qualifier: 'OLD', position: 40, label: 'Old Auto Approval Limit' } ]
   }
-  oldminqty;
+  OldAutoApprLim;
 
   @UI: {
-    fieldGroup: [ { qualifier: 'OLD', position: 50, label: 'Old Version' } ]
+    fieldGroup: [ { qualifier: 'OLD', position: 50, label: 'Old Currency' } ]
   }
-  oldversionno;
+  OldCurrency;
+
+  @UI: {
+    fieldGroup: [ { qualifier: 'OLD', position: 60, label: 'Old Version' } ]
+  }
+  OldVersionNo;
 
   @UI: {
     fieldGroup: [ { qualifier: 'ADMIN', position: 10, label: 'Request ID' } ]
@@ -132,7 +143,7 @@ annotate entity ZC_MM_SAFE_STOCK with
   @UI: {
     fieldGroup: [ { qualifier: 'ADMIN', position: 20, label: 'Request Item ID' } ]
   }
-  reqitemid;
+  ReqItemId;
 
   @UI: {
     fieldGroup: [ { qualifier: 'ADMIN', position: 30, label: 'Item ID' } ]
@@ -142,12 +153,12 @@ annotate entity ZC_MM_SAFE_STOCK with
   @UI: {
     fieldGroup: [ { qualifier: 'ADMIN', position: 40, label: 'Source Item ID' } ]
   }
-  sourceitemid;
+  SourceItemId;
 
   @UI: {
     fieldGroup: [ { qualifier: 'ADMIN', position: 50, label: 'Config ID' } ]
   }
-  confid;
+  ConfId;
 
   @UI: {
     fieldGroup: [ { qualifier: 'ADMIN', position: 60, label: 'Version' } ]
@@ -160,7 +171,7 @@ annotate entity ZC_MM_SAFE_STOCK with
   CreatedBy;
 
   @UI: {
-    lineItem:   [ { position: 70, label: 'Created At' } ],
+    lineItem:   [ { position: 80 } ],
     fieldGroup: [ { qualifier: 'ADMIN', position: 80, label: 'Created At' } ]
   }
   CreatedAt;
@@ -171,7 +182,7 @@ annotate entity ZC_MM_SAFE_STOCK with
   ChangedBy;
 
   @UI: {
-    lineItem:   [ { position: 80, label: 'Changed At' } ],
+    lineItem:   [ { position: 90 } ],
     fieldGroup: [ { qualifier: 'ADMIN', position: 100, label: 'Changed At' } ]
   }
   ChangedAt;

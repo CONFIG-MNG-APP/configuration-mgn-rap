@@ -28,8 +28,8 @@ CLASS lhc_Req DEFINITION INHERITING FROM cl_abap_behavior_handler.
     METHODS submit FOR MODIFY
       IMPORTING keys FOR ACTION Req~submit RESULT result.
 
-    METHODS set_default_and_admin_fields FOR DETERMINE ON MODIFY
-      IMPORTING keys FOR Req~set_default_and_admin_fields.
+    "  METHODS set_default_and_admin_fields FOR DETERMINE ON MODIFY
+    "    IMPORTING keys FOR Req~set_default_and_admin_fields.
 
     METHODS validate_before_save FOR VALIDATE ON SAVE
       IMPORTING keys FOR Req~validate_before_save.
@@ -44,46 +44,35 @@ CLASS lhc_Req IMPLEMENTATION.
 
   METHOD get_instance_features.
 
-    " 1) Read current request data
     READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
       ENTITY Req
         FIELDS ( Status )
         WITH CORRESPONDING #( keys )
       RESULT DATA(lt_reqs).
 
-    " 2) Get current user role from ZUSERROLE table
     DATA lv_role TYPE c LENGTH 20.
     SELECT SINGLE role_level FROM zuserrole
       WHERE user_id  = @sy-uname
         AND is_active = @abap_true
       INTO @lv_role.
 
-    " 3) Build feature control for each request
     LOOP AT lt_reqs INTO DATA(ls_req).
 
-      " === EDIT (update) ===
-      " Only when DRAFT
       DATA(lv_update) = COND #(
-        WHEN ls_req-Status = gc_st_draft
+        WHEN ls_req-Status = gc_st_draft OR ls_req-Status IS INITIAL
         THEN if_abap_behv=>fc-o-enabled
         ELSE if_abap_behv=>fc-o-disabled ).
 
-      " === SUBMIT ===
-      " Only when DRAFT (any user can submit their own request)
       DATA(lv_submit) = COND #(
         WHEN ls_req-Status = gc_st_draft
         THEN if_abap_behv=>fc-o-enabled
         ELSE if_abap_behv=>fc-o-disabled ).
 
-      " === APPROVE ===
-      " Only when SUBMITTED + user is MANAGER
       DATA(lv_approve) = COND #(
         WHEN ls_req-Status = gc_st_submitted AND lv_role = gc_role_manager
         THEN if_abap_behv=>fc-o-enabled
         ELSE if_abap_behv=>fc-o-disabled ).
 
-      " === REJECT ===
-      " Only when SUBMITTED + user is MANAGER
       DATA(lv_reject) = COND #(
         WHEN ls_req-Status = gc_st_submitted AND lv_role = gc_role_manager
         THEN if_abap_behv=>fc-o-enabled
@@ -94,15 +83,15 @@ CLASS lhc_Req IMPLEMENTATION.
         THEN if_abap_behv=>fc-o-enabled
         ELSE if_abap_behv=>fc-o-disabled ).
 
-      " Cập nhật lại phần APPEND VALUE:
       APPEND VALUE #(
         %tky            = ls_req-%tky
         %update         = lv_update
         %action-submit  = lv_submit
         %action-approve = lv_approve
         %action-reject  = lv_reject
-        %action-promote = lv_promote " Đừng quên dòng này
+        %action-promote = lv_promote
       ) TO result.
+
     ENDLOOP.
 
   ENDMETHOD.
@@ -260,30 +249,30 @@ CLASS lhc_Req IMPLEMENTATION.
 
   ENDMETHOD.
 
-  METHOD set_default_and_admin_fields.
+  " METHOD set_default_and_admin_fields.
 
-    DATA lv_now TYPE timestampl.
-    GET TIME STAMP FIELD lv_now.
+  "     DATA lv_now TYPE timestampl.
+  "    GET TIME STAMP FIELD lv_now.
 
-    "Read current instances
-    READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
-      ENTITY Req
-      ALL FIELDS WITH CORRESPONDING #( keys )
-      RESULT DATA(reqs).
+  "Read current instances
+  "    READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
+  "      ENTITY Req
+  "      ALL FIELDS WITH CORRESPONDING #( keys )
+  "    RESULT DATA(reqs).
 
-    MODIFY ENTITIES OF zir_conf_req_h IN LOCAL MODE
-      ENTITY Req
-      UPDATE FIELDS ( Status CreatedBy CreatedAt ChangedBy ChangedAt )
-      WITH VALUE #(
-        FOR r IN reqs
-        ( %tky      = r-%tky
-          Status    = COND #( WHEN r-Status    IS INITIAL THEN gc_st_draft ELSE r-Status )
-          CreatedBy = COND #( WHEN r-CreatedBy IS INITIAL THEN sy-uname    ELSE r-CreatedBy )
-          CreatedAt = COND #( WHEN r-CreatedAt IS INITIAL THEN lv_now      ELSE r-CreatedAt )
-          ChangedBy = sy-uname
-          ChangedAt = lv_now ) ).
+  "    MODIFY ENTITIES OF zir_conf_req_h IN LOCAL MODE
+  "    ENTITY Req
+  "     UPDATE FIELDS ( Status CreatedBy CreatedAt ChangedBy ChangedAt )
+  "     WITH VALUE #(
+  "       FOR r IN reqs
+  "       ( %tky      = r-%tky
+  "       Status    = COND #( WHEN r-Status    IS INITIAL THEN gc_st_draft ELSE r-Status )
+  "          CreatedBy = COND #( WHEN r-CreatedBy IS INITIAL THEN sy-uname    ELSE r-CreatedBy )
+  "           CreatedAt = COND #( WHEN r-CreatedAt IS INITIAL THEN lv_now      ELSE r-CreatedAt )
+  "      ChangedBy = sy-uname
+  "        ChangedAt = lv_now ) ).
 
-  ENDMETHOD.
+  "  ENDMETHOD.
 
   METHOD validate_before_save.
 

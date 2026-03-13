@@ -1,14 +1,19 @@
 @AccessControl.authorizationCheck: #NOT_REQUIRED
-@EndUserText.label: 'SD Price Configuration Projection'
+@EndUserText.label: 'SD Price Request Configuration'
 @Metadata.allowExtensions: true
+@Search.searchable: true
 
 define root view entity ZC_SD_PRICE_CONF
   provider contract transactional_query
   as projection on ZI_SD_PRICE_CONF
 {
+  key ReqId,
+  key ReqItemId,
   key ItemId,
 
-      ReqId,
+      SourceItemId,
+      ConfId,
+      ActionType,
 
       @EndUserText.label: 'Branch'
       @Search.defaultSearchElement: true
@@ -29,6 +34,7 @@ define root view entity ZC_SD_PRICE_CONF
       MaterialGrp,
 
       @EndUserText.label: 'Max Discount'
+      @Semantics.amount.currencyCode: 'Currency'
       MaxDiscount,
 
       @EndUserText.label: 'Min Order Value'
@@ -37,27 +43,33 @@ define root view entity ZC_SD_PRICE_CONF
       @EndUserText.label: 'Approver Group'
       ApproverGrp,
 
-      @EndUserText.label: 'Currency'
       Currency,
-
-      @EndUserText.label: 'Valid From'
       ValidFrom,
-
-      @EndUserText.label: 'Valid To'
       ValidTo,
-
-      @EndUserText.label: 'Version'
       VersionNo,
+      LineStatus,
+      ChangeNote,
 
-      @EndUserText.label: 'Created By'
+      OldBranchId,
+      OldEnvId,
+      OldCustGroup,
+      OldMaterialGrp,
+
+      @Semantics.amount.currencyCode: 'OldCurrency'
+      OldMaxDiscount,
+
+      OldMinOrderVal,
+      OldApproverGrp,
+      OldCurrency,
+      OldValidFrom,
+      OldValidTo,
+      OldVersionNo,
+
       CreatedBy,
-
-      @EndUserText.label: 'Created At'
       CreatedAt,
-
-      @EndUserText.label: 'Changed By'
       ChangedBy,
+      ChangedAt,
 
-      @EndUserText.label: 'Changed At'
-      ChangedAt
+      _Env,
+      _OldEnv
 }

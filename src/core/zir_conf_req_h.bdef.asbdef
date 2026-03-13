@@ -41,10 +41,10 @@ authorization master ( instance )
   action ( features : instance ) submit result [1] $self;
   action ( features : instance ) approve result [1] $self;
   action ( features : instance ) reject result [1] $self;
-  action ( features: instance ) promote result [1] $self;
+  action ( features : instance ) promote result [1] $self;
 
   validation validate_before_save on save { create; update; }
-  determination set_default_and_admin_fields on modify { create; update; }
+  // determination set_default_and_admin_fields on modify { create; update; }
 
   mapping for zconfreqh
   {

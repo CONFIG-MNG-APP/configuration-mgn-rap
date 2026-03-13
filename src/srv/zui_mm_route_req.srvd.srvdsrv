@@ -1,4 +1,0 @@
-@EndUserText.label: 'Service Definition for Route Request'
-define service ZUI_MM_ROUTE_REQ {
-  expose ZC_MM_ROUTE_REQ as RouteRequest;
-}

@@ -1,60 +1,57 @@
 @AccessControl.authorizationCheck: #NOT_REQUIRED
-@EndUserText.label: 'FI Limit Configuration Projection'
+@EndUserText.label: 'FI Limit Request Configuration'
 @Metadata.allowExtensions: true
-
-@UI.headerInfo: {
-  typeName: 'Expense Limit',
-  typeNamePlural: 'Expense Limits',
-  title: { type: #STANDARD, value: 'ExpenseType' },
-  description: { type: #STANDARD, value: 'GlAccount' }
-}
+@Search.searchable: true
 
 define root view entity ZC_FI_LIMIT_CONF
-provider contract transactional_query
+  provider contract transactional_query
   as projection on ZI_FI_LIMIT_CONF
 {
-      @UI.facet: [
-        { id: 'GeneralInfo',
-          purpose: #STANDARD,
-          type: #IDENTIFICATION_REFERENCE,
-          label: 'Limit Details',
-          position: 10 }
-      ]
-
-      @UI: { lineItem:       [{ position: 10, importance: #HIGH }],
-             identification: [{ position: 10 }] }
+  key ReqId,
+  key ReqItemId,
   key ItemId,
 
-      @UI: { identification: [{ position: 20 }] }
-      ReqId,
+      SourceItemId,
+      ConfId,
+      ActionType,
 
-      @UI: { lineItem:       [{ position: 20 }],
-             identification: [{ position: 30 }],
-             selectionField: [{ position: 10 }] }
+      @EndUserText.label: 'Environment'
       EnvId,
 
-      @UI: { lineItem:       [{ position: 30, importance: #HIGH }],
-             identification: [{ position: 40 }],
-             selectionField: [{ position: 20 }] }
+      @EndUserText.label: 'Expense Type'
+      @Search.defaultSearchElement: true
+      @Search.fuzzinessThreshold: 0.8
       ExpenseType,
 
-      @UI: { lineItem:       [{ position: 40, importance: #HIGH }],
-             identification: [{ position: 50 }] }
+      @EndUserText.label: 'G/L Account'
+      @Search.defaultSearchElement: true
+      @Search.fuzzinessThreshold: 0.8
       GlAccount,
 
-      @UI: { lineItem:       [{ position: 50, importance: #HIGH }],
-             identification: [{ position: 60 }] }
+      @EndUserText.label: 'Auto Approval Limit'
+      @Semantics.amount.currencyCode: 'Currency'
       AutoApprLim,
 
-      @UI: { lineItem:       [{ position: 60 }],
-             identification: [{ position: 70 }] }
       Currency,
-
-      @UI: { identification: [{ position: 80 }] }
       VersionNo,
+      LineStatus,
+      ChangeNote,
+
+      OldEnvId,
+      OldExpenseType,
+      OldGlAccount,
+
+      @Semantics.amount.currencyCode: 'OldCurrency'
+      OldAutoApprLim,
+
+      OldCurrency,
+      OldVersionNo,
 
       CreatedBy,
       CreatedAt,
       ChangedBy,
-      ChangedAt
+      ChangedAt,
+
+      _Env,
+      _OldEnv
 }
