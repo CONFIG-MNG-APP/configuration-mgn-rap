@@ -54,7 +54,7 @@ annotate entity ZC_MM_ROUTE_CONF with
     lineItem:       [ { position: 10, label: 'Action', importance: #HIGH } ],
     identification: [ { position: 10, label: 'Action' } ]
   }
-  actiontype;
+  ActionType;
 
   @UI: {
     lineItem:       [ { position: 20, label: 'Environment', importance: #HIGH } ],
@@ -108,55 +108,56 @@ annotate entity ZC_MM_ROUTE_CONF with
   InspectorId;
 
   @UI: {
-    lineItem:   [ { position: 90, label: 'Line Status' } ],
+    lineItem:   [ { position: 90, label: 'Line Status' },
+                  { position: 130, type: #FOR_ACTION, dataAction: 'approve', label: 'Approve' } ],
     fieldGroup: [ { qualifier: 'CURRENT', position: 80, label: 'Line Status' } ]
   }
-  linestatus;
+  LineStatus;
 
   @UI: {
     fieldGroup: [ { qualifier: 'CURRENT', position: 90, label: 'Change Note' } ]
   }
-  changenote;
+  ChangeNote;
 
   @UI: {
     fieldGroup: [ { qualifier: 'OLD', position: 10, label: 'Old Environment' } ]
   }
-  oldenvid;
+  OldEnvId;
 
   @UI: {
     fieldGroup: [ { qualifier: 'OLD', position: 20, label: 'Old Plant' } ]
   }
-  oldplantid;
+  OldPlantId;
 
   @UI: {
     fieldGroup: [ { qualifier: 'OLD', position: 30, label: 'Old Sending Warehouse' } ]
   }
-  oldsendwh;
+  OldSendWh;
 
   @UI: {
     fieldGroup: [ { qualifier: 'OLD', position: 40, label: 'Old Receiving Warehouse' } ]
   }
-  oldreceivewh;
+  OldReceiveWh;
 
   @UI: {
     fieldGroup: [ { qualifier: 'OLD', position: 50, label: 'Old Inspector' } ]
   }
-  oldinspectorid;
+  OldInspectorId;
 
   @UI: {
     fieldGroup: [ { qualifier: 'OLD', position: 60, label: 'Old Transport Mode' } ]
   }
-  oldtransmode;
+  OldTransMode;
 
   @UI: {
     fieldGroup: [ { qualifier: 'OLD', position: 70, label: 'Old Allowed' } ]
   }
-  oldisallowed;
+  OldIsAllowed;
 
   @UI: {
     fieldGroup: [ { qualifier: 'OLD', position: 80, label: 'Old Version' } ]
   }
-  oldversionno;
+  OldVersionNo;
 
   @UI: {
     fieldGroup: [ { qualifier: 'ADMIN', position: 10, label: 'Request ID' } ]
@@ -166,7 +167,7 @@ annotate entity ZC_MM_ROUTE_CONF with
   @UI: {
     fieldGroup: [ { qualifier: 'ADMIN', position: 20, label: 'Request Item ID' } ]
   }
-  reqitemid;
+  ReqItemId;
 
   @UI: {
     fieldGroup: [ { qualifier: 'ADMIN', position: 30, label: 'Item ID' } ]
@@ -176,12 +177,12 @@ annotate entity ZC_MM_ROUTE_CONF with
   @UI: {
     fieldGroup: [ { qualifier: 'ADMIN', position: 40, label: 'Source Item ID' } ]
   }
-  sourceitemid;
+  SourceItemId;
 
   @UI: {
     fieldGroup: [ { qualifier: 'ADMIN', position: 50, label: 'Config ID' } ]
   }
-  confid;
+  ConfId;
 
   @UI: {
     lineItem:   [ { position: 100, label: 'Version' } ],

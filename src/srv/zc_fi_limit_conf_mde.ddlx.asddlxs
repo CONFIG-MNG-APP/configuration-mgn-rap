@@ -94,11 +94,13 @@ annotate entity ZC_FI_LIMIT_CONF with
   }
   Currency;
 
-  @UI: {
-    lineItem:   [ { position: 70 } ],
+    @UI: {
+    lineItem:   [ { position: 70 },
+                  { position: 100, type: #FOR_ACTION, dataAction: 'approve', label: 'Approve' } ],
     fieldGroup: [ { qualifier: 'CURRENT', position: 60, label: 'Line Status' } ]
   }
   LineStatus;
+
 
   @UI: {
     fieldGroup: [ { qualifier: 'CURRENT', position: 70, label: 'Change Note' } ]

@@ -26,6 +26,7 @@ CLASS lhc_Req DEFINITION INHERITING FROM cl_abap_behavior_handler.
     METHODS promote FOR MODIFY IMPORTING keys FOR ACTION Req~promote RESULT result.
     METHODS rollback FOR MODIFY IMPORTING keys FOR ACTION Req~rollback RESULT result.
     METHODS createRequest FOR MODIFY IMPORTING keys FOR ACTION Req~createRequest RESULT result.
+    METHODS updateReason FOR MODIFY IMPORTING keys FOR ACTION Req~updateReason RESULT result.
 
     METHODS set_default_and_admin_fields FOR DETERMINE ON MODIFY IMPORTING keys FOR Req~set_default_and_admin_fields.
     METHODS validate_before_save FOR VALIDATE ON SAVE IMPORTING keys FOR Req~validate_before_save.
@@ -52,6 +53,7 @@ CLASS lhc_Req IMPLEMENTATION.
       " Khởi tạo mặc định là Disabled
       DATA(lv_approve_fc) = if_abap_behv=>fc-o-disabled.
       DATA(lv_promote_fc) = if_abap_behv=>fc-o-disabled.
+      DATA(lv_rollback)   = if_abap_behv=>fc-o-disabled.
 
       " Logic duyệt: Phải là trạng thái 'S' VÀ người dùng phải là 'MANAGER'
       IF ls_req-Status = 'S' AND lv_current_role = 'MANAGER'.
@@ -63,10 +65,17 @@ CLASS lhc_Req IMPLEMENTATION.
         lv_promote_fc = if_abap_behv=>fc-o-enabled.
       ENDIF.
 
-      APPEND VALUE #( %tky            = ls_req-%tky
-                      %action-approve = lv_approve_fc
-                      %action-reject  = lv_approve_fc
-                      %action-promote = lv_promote_fc
+      " updateReason: cho phép khi còn ở trạng thái DRAFT hoặc SUBMITTED
+      DATA(lv_update_reason_fc) = COND #(
+        WHEN ls_req-Status = gc_st_draft OR ls_req-Status = gc_st_submitted
+        THEN if_abap_behv=>fc-o-enabled
+        ELSE if_abap_behv=>fc-o-disabled ).
+
+      APPEND VALUE #( %tky                   = ls_req-%tky
+                      %action-approve        = lv_approve_fc
+                      %action-reject         = lv_approve_fc
+                      %action-promote        = lv_promote_fc
+                      %action-updateReason   = lv_update_reason_fc
                     ) TO result.
     ENDLOOP.
   ENDMETHOD.
@@ -410,7 +419,8 @@ CLASS lhc_Req IMPLEMENTATION.
       RESULT DATA(reqs).
 
     LOOP AT reqs ASSIGNING FIELD-SYMBOL(<r>).
-      IF <r>-Status <> gc_st_approved AND <r>-Status <> gc_st_active.
+      IF <r>-Status <> 'A' AND <r>-Status <> 'ACTIVE'.
+
         APPEND VALUE #(
           %tky = <r>-%tky
           %msg = new_message_with_text(
@@ -759,6 +769,29 @@ CLASS lhc_Req IMPLEMENTATION.
 
     ENDLOOP.
 
+  ENDMETHOD.
+
+
+  METHOD updateReason.
+    DATA lv_now TYPE timestampl.
+    GET TIME STAMP FIELD lv_now.
+
+    LOOP AT keys INTO DATA(ls_key).
+      MODIFY ENTITIES OF zir_conf_req_h IN LOCAL MODE
+        ENTITY Req UPDATE FIELDS ( Reason ChangedBy ChangedAt )
+        WITH VALUE #( (
+          %tky      = ls_key-%tky
+          Reason    = ls_key-%param-reason
+          ChangedBy = sy-uname
+          ChangedAt = lv_now
+        ) ).
+    ENDLOOP.
+
+    READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
+      ENTITY Req ALL FIELDS WITH CORRESPONDING #( keys )
+      RESULT DATA(reqs).
+
+    result = VALUE #( FOR r IN reqs ( %tky = r-%tky ) ).
   ENDMETHOD.
 
 

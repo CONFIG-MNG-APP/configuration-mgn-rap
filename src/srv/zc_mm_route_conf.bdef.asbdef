@@ -8,6 +8,8 @@ define behavior for ZC_MM_ROUTE_CONF alias RouteConf
   use update;
   use delete;
 
+  use action approve;
+
   use action Edit;
   use action Activate;
   use action Discard;

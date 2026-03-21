@@ -7,7 +7,7 @@ persistent table zmmrouteconf_req
 draft table zmmrouteroot_d
 lock master
 total etag ChangedAt
-authorization master ( global )
+authorization master ( instance )
 etag master ChangedAt
 {
   create;
@@ -33,7 +33,9 @@ etag master ChangedAt
   field ( readonly )
     CreatedBy, CreatedAt, ChangedBy, ChangedAt, VersionNo;
 
-  determination set_defaults on modify { create; }
+  determination set_defaults on modify { field SourceItemId, ActionType; }
+  determination setAdminFields on modify { field EnvId, PlantId, SendWh, ReceiveWh, InspectorId, TransMode, IsAllowed, ChangeNote; }
+  action ( features : instance ) approve result [1] $self;
 
   validation validate_mandatory on save { create; update; }
   validation validate_business  on save { create; update; }
@@ -42,7 +44,11 @@ etag master ChangedAt
   draft action Activate;
   draft action Discard;
   draft action Resume;
-  draft determine action Prepare;
+  draft determine action Prepare
+  {
+    validation validate_mandatory;
+    validation validate_business;
+  }
 
   mapping for zmmrouteconf_req
   {

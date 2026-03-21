@@ -6,7 +6,7 @@ define behavior for ZI_FI_LIMIT_CONF alias LimitConf
 persistent table zfilimitreq
 draft table zfi_limit_d
 lock master total etag ChangedAt
-authorization master ( global )
+authorization master ( instance )
 etag master ChangedAt
 {
   create;
@@ -30,6 +30,8 @@ etag master ChangedAt
 
   field ( mandatory ) EnvId, ExpenseType, GlAccount, AutoApprLim;
 
+  action ( features : instance ) approve result [1] $self;
+
   draft action Edit;
   draft action Activate;
   draft action Discard;
@@ -40,7 +42,8 @@ etag master ChangedAt
     validation validate_business;
   }
 
-  determination set_defaults on modify { create; }
+  determination set_defaults on modify { field SourceItemId, ActionType; }
+ determination setAdminFields on modify { field EnvId, ExpenseType, GlAccount, AutoApprLim, ChangeNote; }
   validation validate_mandatory on save { create; update; }
   validation validate_business  on save { create; update; }
 

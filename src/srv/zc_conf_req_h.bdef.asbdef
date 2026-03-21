@@ -13,6 +13,7 @@ define behavior for ZC_CONF_REQ_H
   use action Discard;
   use action Resume;
   use action Prepare;
+  use action updateReason;
 
   use action submit;
   use action approve;
