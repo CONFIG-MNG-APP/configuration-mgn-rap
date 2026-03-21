@@ -178,37 +178,65 @@ CLASS zcl_gsp26_rule_snapshot IMPLEMENTATION.
 
     LOOP AT lt_snapshots INTO DATA(ls_snap).
 
-      CASE ls_snap-table_name.
+            CASE ls_snap-table_name.
         WHEN 'ZSD_PRICE_CONF'.
-          SELECT SINGLE * FROM zsd_price_conf
-            WHERE item_id = @ls_snap-object_key
-            INTO @DATA(ls_price_r).
-          IF sy-subrc = 0.
+          DATA ls_price TYPE zsd_price_conf.
+          IF ls_snap-old_data IS NOT INITIAL.
+            /ui2/cl_json=>deserialize( EXPORTING json = ls_snap-old_data CHANGING data = ls_price ).
+            MODIFY zsd_price_conf FROM @ls_price.
             APPEND VALUE #( success    = abap_true
                             message    = 'SD Price Config restored'
-                            table_name = 'ZSD_PRICE_CONF' )
-              TO rt_results.
+                            table_name = 'ZSD_PRICE_CONF' ) TO rt_results.
           ELSE.
-            APPEND VALUE #( success    = abap_false
-                            message    = 'SD Price record not found'
-                            table_name = 'ZSD_PRICE_CONF' )
-              TO rt_results.
+            DELETE FROM zsd_price_conf WHERE item_id = @ls_snap-object_key.
+            APPEND VALUE #( success    = abap_true
+                            message    = 'SD Price Config deleted (rollback create)'
+                            table_name = 'ZSD_PRICE_CONF' ) TO rt_results.
           ENDIF.
 
         WHEN 'ZMMSAFESTOCK'.
-          SELECT SINGLE * FROM zmmsafestock
-            WHERE item_id = @ls_snap-object_key
-            INTO @DATA(ls_stock_r).
-          IF sy-subrc = 0.
+          DATA ls_stock TYPE zmmsafestock.
+          IF ls_snap-old_data IS NOT INITIAL.
+            /ui2/cl_json=>deserialize( EXPORTING json = ls_snap-old_data CHANGING data = ls_stock ).
+            MODIFY zmmsafestock FROM @ls_stock.
             APPEND VALUE #( success    = abap_true
                             message    = 'MM Safe Stock restored'
-                            table_name = 'ZMMSAFESTOCK' )
-              TO rt_results.
+                            table_name = 'ZMMSAFESTOCK' ) TO rt_results.
           ELSE.
-            APPEND VALUE #( success    = abap_false
-                            message    = 'MM Safe Stock not found'
-                            table_name = 'ZMMSAFESTOCK' )
-              TO rt_results.
+            DELETE FROM zmmsafestock WHERE item_id = @ls_snap-object_key.
+            APPEND VALUE #( success    = abap_true
+                            message    = 'MM Safe Stock deleted (rollback create)'
+                            table_name = 'ZMMSAFESTOCK' ) TO rt_results.
+          ENDIF.
+
+        WHEN 'ZFILIMITCONF'.
+          DATA ls_limit TYPE zfilimitconf.
+          IF ls_snap-old_data IS NOT INITIAL.
+            /ui2/cl_json=>deserialize( EXPORTING json = ls_snap-old_data CHANGING data = ls_limit ).
+            MODIFY zfilimitconf FROM @ls_limit.
+            APPEND VALUE #( success    = abap_true
+                            message    = 'FI Limit restored'
+                            table_name = 'ZFILIMITCONF' ) TO rt_results.
+          ELSE.
+            DELETE FROM zfilimitconf WHERE item_id = @ls_snap-object_key.
+            APPEND VALUE #( success    = abap_true
+                            message    = 'FI Limit deleted (rollback create)'
+                            table_name = 'ZFILIMITCONF' ) TO rt_results.
+          ENDIF.
+
+        WHEN 'ZMMROUTECONF'.
+          DATA ls_route TYPE zmmrouteconf.
+          IF ls_snap-old_data IS NOT INITIAL.
+            /ui2/cl_json=>deserialize( EXPORTING json = ls_snap-old_data CHANGING data = ls_route ).
+            MODIFY zmmrouteconf FROM @ls_route.
+            APPEND VALUE #( success    = abap_true
+                            message    = 'MM Route Config restored'
+                            table_name = 'ZMMROUTECONF' ) TO rt_results.
+          ELSE.
+            DELETE FROM zmmrouteconf WHERE item_id = @ls_snap-object_key.
+            APPEND VALUE #( success    = abap_true
+                            message    = 'MM Route Config deleted (rollback create)'
+                            table_name = 'ZMMROUTECONF' ) TO rt_results.
           ENDIF.
 
         WHEN OTHERS.
@@ -217,6 +245,7 @@ CLASS zcl_gsp26_rule_snapshot IMPLEMENTATION.
                           table_name = ls_snap-table_name )
             TO rt_results.
       ENDCASE.
+
 
       CLEAR ls_log.
       TRY.

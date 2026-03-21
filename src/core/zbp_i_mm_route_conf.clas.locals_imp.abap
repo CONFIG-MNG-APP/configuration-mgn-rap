@@ -62,6 +62,29 @@ CLASS lhc_RouteConf IMPLEMENTATION.
           )
         ).
 
+      " ── Auto-populate ReqItemId + ConfId từ ZCONFREQI khi user tạo row mới ──
+      IF <r>-ReqId IS NOT INITIAL AND <r>-ReqItemId IS INITIAL.
+
+        SELECT SINGLE req_item_id, conf_id
+          FROM zconfreqi
+          WHERE req_id = @<r>-ReqId
+          INTO @DATA(ls_req_item).
+
+        IF sy-subrc = 0.
+          MODIFY ENTITIES OF zi_mm_route_conf IN LOCAL MODE
+            ENTITY RouteConf
+            UPDATE FIELDS ( ReqItemId ConfId )
+            WITH VALUE #(
+              (
+                %tky      = <r>-%tky
+                ReqItemId = ls_req_item-req_item_id
+                ConfId    = ls_req_item-conf_id
+              )
+            ).
+        ENDIF.
+
+      ENDIF.
+
       IF lv_action_type = 'UPDATE' OR lv_action_type = 'DELETE'.
 
         IF <r>-SourceItemId IS INITIAL.
@@ -110,14 +133,14 @@ CLASS lhc_RouteConf IMPLEMENTATION.
               OldIsAllowed    = ls_src-is_allowed
               OldVersionNo    = ls_src-version_no
 
-              EnvId           = ls_src-env_id
-              PlantId         = ls_src-plant_id
-              SendWh          = ls_src-send_wh
-              ReceiveWh       = ls_src-receive_wh
-              InspectorId     = ls_src-inspector_id
-              TransMode       = ls_src-trans_mode
-              IsAllowed       = ls_src-is_allowed
-              VersionNo       = ls_src-version_no
+                  EnvId           = ls_src-env_id
+                  PlantId         = ls_src-plant_id
+                  SendWh          = ls_src-send_wh
+                  ReceiveWh       = ls_src-receive_wh
+                  InspectorId     = ls_src-inspector_id
+                  TransMode       = ls_src-trans_mode
+                  IsAllowed       = ls_src-is_allowed
+                  VersionNo       = ls_src-version_no
             )
           ).
 
@@ -335,6 +358,27 @@ CLASS lhc_RouteConf IMPLEMENTATION.
         changed_by   = sy-uname
         changed_at   = lv_now
       ).
+
+      " Lấy dữ liệu CŨ trước khi thay đổi để làm Rollback Snapshot
+      DATA ls_old_route TYPE zmmrouteconf.
+      CLEAR ls_old_route.
+      IF <req>-ActionType = 'UPDATE' OR <req>-ActionType = 'DELETE'.
+        SELECT SINGLE * FROM zmmrouteconf WHERE item_id = @ls_conf-item_id INTO @ls_old_route.
+      ENDIF.
+      TRY.
+          " Ghi log audit snapshot (serialize JSON tự động)
+          zcl_gsp26_rule_writer=>log_audit_entry(
+            iv_conf_id  = ls_conf-item_id
+            iv_req_id   = <req>-ReqId
+            iv_mod_id   = 'MM'
+            iv_act_type = 'APPROVE'
+            iv_tab_name = 'ZMMROUTECONF'
+            iv_env_id   = <req>-EnvId
+            is_old_data = ls_old_route
+            is_new_data = ls_conf ).
+        CATCH cx_root.
+          " Nếu lỗi ghi log thì bỏ qua vẫn chạy tiếp
+      ENDTRY.
 
       " Xử lý theo ActionType
       TRY.

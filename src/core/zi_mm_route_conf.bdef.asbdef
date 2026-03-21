@@ -14,7 +14,8 @@ etag master ChangedAt
   update;
   delete;
 
-  field ( readonly ) ReqId, ReqItemId;
+  field ( readonly : update ) ReqId;
+  field ( readonly ) ReqItemId;
   field ( readonly, numbering : managed ) ItemId;
 
   field ( readonly ) SourceItemId, ConfId;

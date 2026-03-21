@@ -803,44 +803,44 @@ CLASS lhc_Item DEFINITION INHERITING FROM cl_abap_behavior_handler.
 ENDCLASS.
 
 CLASS lhc_Item IMPLEMENTATION.
-  METHOD validate_item.
-    "    READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
-    "      ENTITY Item ALL FIELDS WITH CORRESPONDING #( keys )
-    "    RESULT DATA(lt_items).
+    METHOD validate_item.
+    READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
+      ENTITY Item ALL FIELDS WITH CORRESPONDING #( keys )
+      RESULT DATA(lt_items).
 
-    "    LOOP AT lt_items ASSIGNING FIELD-SYMBOL(<i>).
-    "     IF <i>-ConfId IS INITIAL.
-    "      APPEND VALUE #(
-    "       %tky = <i>-%tky
-    "      %msg = new_message_with_text(
-    "       severity = if_abap_behv_message=>severity-error
-    "      text     = 'ConfId là bắt buộc'
-    "   )
-    " ) TO reported-item.
-    " APPEND VALUE #( %tky = <i>-%tky ) TO failed-item.
-    " ENDIF.
+    LOOP AT lt_items ASSIGNING FIELD-SYMBOL(<i>).
 
-    "       IF <i>-Action IS INITIAL.
-    "        APPEND VALUE #(
-    "           %tky = <i>-%tky
-    "           %msg = new_message_with_text(
-    "            severity = if_abap_behv_message=>severity-error
-    "          text     = 'Action là bắt buộc'
-    "          )
-    "       ) TO reported-item.
-    "        APPEND VALUE #( %tky = <i>-%tky ) TO failed-item.
-    "     ENDIF.
+      IF <i>-ConfId IS INITIAL.
+        APPEND VALUE #(
+          %tky = <i>-%tky
+          %msg = new_message_with_text(
+            severity = if_abap_behv_message=>severity-error
+            text     = 'ConfId is mandatory' )
+        ) TO reported-item.
+        APPEND VALUE #( %tky = <i>-%tky ) TO failed-item.
+      ENDIF.
 
-    "      IF <i>-TargetEnvId IS INITIAL.
-    "    APPEND VALUE #(
-    "        %tky = <i>-%tky
-    "      %msg = new_message_with_text(
-    "          severity = if_abap_behv_message=>severity-error
-    "          text     = 'TargetEnvId là bắt buộc'
-    "           )
-    "     ) TO reported-item.
-    "        APPEND VALUE #( %tky = <i>-%tky ) TO failed-item.
-    "      ENDIF.
-    "    ENDLOOP.
+      IF <i>-Action IS INITIAL.
+        APPEND VALUE #(
+          %tky = <i>-%tky
+          %msg = new_message_with_text(
+            severity = if_abap_behv_message=>severity-error
+            text     = 'Action is mandatory' )
+        ) TO reported-item.
+        APPEND VALUE #( %tky = <i>-%tky ) TO failed-item.
+      ENDIF.
+
+      IF <i>-TargetEnvId IS INITIAL.
+        APPEND VALUE #(
+          %tky = <i>-%tky
+          %msg = new_message_with_text(
+            severity = if_abap_behv_message=>severity-error
+            text     = 'TargetEnvId is mandatory' )
+        ) TO reported-item.
+        APPEND VALUE #( %tky = <i>-%tky ) TO failed-item.
+      ENDIF.
+
+    ENDLOOP.
   ENDMETHOD.
+
 ENDCLASS.

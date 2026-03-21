@@ -281,6 +281,29 @@ CLASS lhc_LimitConf IMPLEMENTATION.
         changed_at    = lv_now
       ).
 
+            " Lấy dữ liệu CŨ trước khi thay đổi để làm Rollback Snapshot
+      DATA ls_old_limit TYPE zfilimitconf.
+      CLEAR ls_old_limit.
+      IF <req>-ActionType = 'UPDATE' OR <req>-ActionType = 'DELETE'.
+        SELECT SINGLE * FROM zfilimitconf WHERE item_id = @ls_conf-item_id INTO @ls_old_limit.
+      ENDIF.
+
+      TRY.
+          " Ghi log audit snapshot (serialize JSON tự động)
+          zcl_gsp26_rule_writer=>log_audit_entry(
+            iv_conf_id  = ls_conf-item_id
+            iv_req_id   = <req>-ReqId
+            iv_mod_id   = 'FI'
+            iv_act_type = 'APPROVE'
+            iv_tab_name = 'ZFILIMITCONF'
+            iv_env_id   = <req>-EnvId
+            is_old_data = ls_old_limit
+            is_new_data = ls_conf ).
+        CATCH cx_root.
+      ENDTRY.
+
+      " 6. Xử lý theo ActionType
+
       TRY.
           CASE <req>-ActionType.
 

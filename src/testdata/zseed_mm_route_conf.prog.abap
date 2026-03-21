@@ -4,9 +4,5 @@
 *&
 *&---------------------------------------------------------------------*
 REPORT zseed_mm_route_conf.
-  DELETE FROM zconfreqi.
-  DELETE FROM zconfreqh.
-  DELETE FROM zconfreqi_d.
-  DELETE FROM zconfreqh_d.
-
+  DELETE FROM zmmrouteconf_req.
   COMMIT WORK.
