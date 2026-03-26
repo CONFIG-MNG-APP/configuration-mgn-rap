@@ -86,13 +86,17 @@ CLASS lhc_Req IMPLEMENTATION.
   METHOD get_instance_features.
   ENDMETHOD.
 
-     METHOD approve.
+    METHOD approve.
     DATA: lv_now TYPE timestampl.
     GET TIME STAMP FIELD lv_now.
 
-    " Mảng chứa toàn bộ Log (Header + Items) để Insert 1 lần duy nhất xuống DB
+    " Hằng số môi trường (Ép cứng ghi xuống DEV)
+    CONSTANTS: lc_env_dev TYPE string VALUE 'DEV'.
+
+    " Mảng chứa toàn bộ Log (Header + Items) để Insert 1 lần duy nhất
     DATA: lt_audit_log TYPE STANDARD TABLE OF zauditlog,
-          ls_audit_log TYPE zauditlog.
+          ls_audit_log TYPE zauditlog,
+          lv_record_exists TYPE abap_boolean. " Khai báo biến check tồn tại 1 lần duy nhất
 
     " 1. Đọc dữ liệu Header và Items kèm theo
     READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
@@ -132,7 +136,7 @@ CLASS lhc_Req IMPLEMENTATION.
         DATA(lt_val_errors) = zcl_gsp26_rule_validator=>validate_request_item(
                                 iv_conf_id       = ls_item-ConfId
                                 iv_action        = ls_item-Action
-                                iv_target_env_id = ls_item-TargetEnvId ).
+                                iv_target_env_id = CONV #( lc_env_dev ) ). " Truyền DEV vào validator
         IF lt_val_errors IS NOT INITIAL.
           lv_has_error = abap_true.
           APPEND VALUE #( %tky = <r>-%tky ) TO failed-req.
@@ -150,14 +154,18 @@ CLASS lhc_Req IMPLEMENTATION.
       " 5. GHI LOG CHO HEADER VÀO INTERNAL TABLE
       " -------------------------------------------------------------
       ls_audit_log-client      = sy-mandt.
-      ls_audit_log-log_id      = cl_system_uuid=>create_uuid_x16_static( ).
+      TRY.
+          ls_audit_log-log_id  = cl_system_uuid=>create_uuid_x16_static( ).
+        CATCH cx_uuid_error.
+          " Bỏ qua nếu lỗi sinh UUID
+      ENDTRY.
       ls_audit_log-req_id      = <r>-ReqId.
       ls_audit_log-conf_id     = VALUE #( lt_curr_items[ 1 ]-ConfId OPTIONAL ).
       ls_audit_log-module_id   = <r>-ModuleId.
       ls_audit_log-action_type = 'APPROVE'.
-      ls_audit_log-table_name  = 'ZCONFREQH'. " Chuyên để FE filter tránh nhầm
-      ls_audit_log-env_id      = <r>-EnvId.
-      ls_audit_log-old_data    = |\{"REQTITLE":"","STATUS":""\}|. " Bỏ qua cho sạch
+      ls_audit_log-table_name  = 'ZCONFREQH'.
+      ls_audit_log-env_id      = lc_env_dev. " Ép môi trường DEV
+      ls_audit_log-old_data    = |\{"REQTITLE":"","STATUS":""\}|.
       ls_audit_log-new_data    = |\{"REQTITLE":"{ <r>-ReqTitle }","STATUS":"{ gc_st_approved }"\}|.
       ls_audit_log-changed_by  = sy-uname.
       ls_audit_log-changed_at  = lv_now.
@@ -168,7 +176,7 @@ CLASS lhc_Req IMPLEMENTATION.
       MODIFY ENTITIES OF zir_conf_req_h IN LOCAL MODE
         ENTITY Req UPDATE FIELDS ( Status ApprovedBy ApprovedAt )
         WITH VALUE #( ( %tky = <r>-%tky Status = gc_st_approved ApprovedBy = sy-uname ApprovedAt = lv_now ) ).
-      " Tăng version sau khi approve thành công
+
       DATA(lt_ver_results) = zcl_gsp26_rule_snapshot=>increment_version( iv_req_id = <r>-ReqId ).
 
 
@@ -179,15 +187,14 @@ CLASS lhc_Req IMPLEMENTATION.
       IF lt_ss_req IS NOT INITIAL.
         LOOP AT lt_ss_req ASSIGNING FIELD-SYMBOL(<ss>).
 
-          " TẠO DÒNG LOG ITEM
           ls_audit_log-client      = sy-mandt.
-          ls_audit_log-log_id      = cl_system_uuid=>create_uuid_x16_static( ).
+          TRY. ls_audit_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
           ls_audit_log-req_id      = <r>-ReqId.
           ls_audit_log-conf_id     = <ss>-conf_id.
           ls_audit_log-module_id   = 'MM'.
           ls_audit_log-action_type = 'APPROVE'.
           ls_audit_log-table_name  = 'Z_MM_SAFE_STOCK'.
-          ls_audit_log-env_id      = <ss>-env_id.
+          ls_audit_log-env_id      = lc_env_dev.
           ls_audit_log-object_key  = <ss>-item_id.
           ls_audit_log-old_data    = |\{"PLANT_ID":"{ <ss>-old_plant_id }","MAT_GROUP":"{ <ss>-old_mat_group }","MIN_QTY":"{ <ss>-old_min_qty }"\}|.
           ls_audit_log-new_data    = |\{"PLANT_ID":"{ <ss>-plant_id }","MAT_GROUP":"{ <ss>-mat_group }","MIN_QTY":"{ <ss>-min_qty }"\}|.
@@ -196,18 +203,18 @@ CLASS lhc_Req IMPLEMENTATION.
           APPEND ls_audit_log TO lt_audit_log.
           CLEAR ls_audit_log.
 
+          CLEAR lv_record_exists.
           CASE <ss>-action_type.
             WHEN 'U'.
-              SELECT SINGLE @abap_true FROM zmmsafestock WHERE item_id = @<ss>-source_item_id INTO @DATA(lv_ss_exists).
-              IF lv_ss_exists = abap_true.
-                DATA(lv_new_version) = <ss>-version_no + 1.
+              SELECT SINGLE @abap_true FROM zmmsafestock WHERE item_id = @<ss>-source_item_id INTO @lv_record_exists.
+              IF lv_record_exists = abap_true.
                 UPDATE zmmsafestock SET
-                  env_id = @<ss>-env_id,
-                  plant_id = @<ss>-plant_id,
-                  mat_group = @<ss>-mat_group,
-                  min_qty = @<ss>-min_qty,
+                  env_id     = @lc_env_dev, " Ép ghi xuống DEV
+                  plant_id   = @<ss>-plant_id,
+                  mat_group  = @<ss>-mat_group,
+                  min_qty    = @<ss>-min_qty,
                   version_no = @<ss>-version_no,
-                  req_id = @<r>-ReqId,
+                  req_id     = @<r>-ReqId,
                   changed_by = @sy-uname,
                   changed_at = @lv_now
                 WHERE item_id = @<ss>-source_item_id.
@@ -217,7 +224,7 @@ CLASS lhc_Req IMPLEMENTATION.
                 client     = sy-mandt
                 item_id    = <ss>-item_id
                 req_id     = <r>-ReqId
-                env_id     = <ss>-env_id
+                env_id     = lc_env_dev " Ép ghi xuống DEV
                 plant_id   = <ss>-plant_id
                 mat_group  = <ss>-mat_group
                 min_qty    = <ss>-min_qty
@@ -229,6 +236,7 @@ CLASS lhc_Req IMPLEMENTATION.
               DELETE FROM zmmsafestock WHERE item_id = @<ss>-source_item_id.
           ENDCASE.
         ENDLOOP.
+        UPDATE zmmsafestock_req SET line_status = @gc_st_approved, changed_by = @sy-uname, changed_at = @lv_now WHERE req_id = @<r>-ReqId.
       ENDIF.
 
 
@@ -239,15 +247,14 @@ CLASS lhc_Req IMPLEMENTATION.
       IF lt_route_req IS NOT INITIAL.
         LOOP AT lt_route_req ASSIGNING FIELD-SYMBOL(<rt>).
 
-          " TẠO DÒNG LOG ITEM
           ls_audit_log-client      = sy-mandt.
-          ls_audit_log-log_id      = cl_system_uuid=>create_uuid_x16_static( ).
+          TRY. ls_audit_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
           ls_audit_log-req_id      = <r>-ReqId.
           ls_audit_log-conf_id     = <rt>-conf_id.
           ls_audit_log-module_id   = 'MM'.
           ls_audit_log-action_type = 'APPROVE'.
           ls_audit_log-table_name  = 'Z_MM_ROUTE_CONF'.
-          ls_audit_log-env_id      = <rt>-env_id.
+          ls_audit_log-env_id      = lc_env_dev.
           ls_audit_log-object_key  = <rt>-item_id.
           ls_audit_log-old_data    = |\{"PLANT_ID":"{ <rt>-old_plant_id }","SEND_WH":"{ <rt>-old_send_wh }","RECEIVE_WH":"{ <rt>-old_receive_wh }","TRANS_MODE":"{ <rt>-old_trans_mode }"\}|.
           ls_audit_log-new_data    = |\{"PLANT_ID":"{ <rt>-plant_id }","SEND_WH":"{ <rt>-send_wh }","RECEIVE_WH":"{ <rt>-receive_wh }","TRANS_MODE":"{ <rt>-trans_mode }"\}|.
@@ -256,22 +263,23 @@ CLASS lhc_Req IMPLEMENTATION.
           APPEND ls_audit_log TO lt_audit_log.
           CLEAR ls_audit_log.
 
+          CLEAR lv_record_exists.
           CASE <rt>-action_type.
             WHEN 'U'.
-              SELECT SINGLE @abap_true FROM zmmrouteconf WHERE item_id = @<rt>-source_item_id INTO @DATA(lv_rt_exists).
-              IF lv_rt_exists = abap_true.
+              SELECT SINGLE @abap_true FROM zmmrouteconf WHERE item_id = @<rt>-source_item_id INTO @lv_record_exists.
+              IF lv_record_exists = abap_true.
                 UPDATE zmmrouteconf SET
-                  env_id = @<rt>-env_id,
-                  plant_id = @<rt>-plant_id,
-                  send_wh = @<rt>-send_wh,
-                  receive_wh = @<rt>-receive_wh,
+                  env_id       = @lc_env_dev,
+                  plant_id     = @<rt>-plant_id,
+                  send_wh      = @<rt>-send_wh,
+                  receive_wh   = @<rt>-receive_wh,
                   inspector_id = @<rt>-inspector_id,
-                  trans_mode = @<rt>-trans_mode,
-                  is_allowed = @<rt>-is_allowed,
-                  version_no = @<rt>-version_no,
-                  req_id = @<r>-ReqId,
-                  changed_by = @sy-uname,
-                  changed_at = @lv_now
+                  trans_mode   = @<rt>-trans_mode,
+                  is_allowed   = @<rt>-is_allowed,
+                  version_no   = @<rt>-version_no,
+                  req_id       = @<r>-ReqId,
+                  changed_by   = @sy-uname,
+                  changed_at   = @lv_now
                 WHERE item_id = @<rt>-source_item_id.
               ENDIF.
             WHEN 'C'.
@@ -279,7 +287,7 @@ CLASS lhc_Req IMPLEMENTATION.
                 client       = sy-mandt
                 item_id      = <rt>-item_id
                 req_id       = <r>-ReqId
-                env_id       = <rt>-env_id
+                env_id       = lc_env_dev
                 plant_id     = <rt>-plant_id
                 send_wh      = <rt>-send_wh
                 receive_wh   = <rt>-receive_wh
@@ -293,7 +301,7 @@ CLASS lhc_Req IMPLEMENTATION.
               DELETE FROM zmmrouteconf WHERE item_id = @<rt>-source_item_id.
           ENDCASE.
         ENDLOOP.
-        UPDATE zmmrouteconf_req SET line_status = 'A', changed_by = @sy-uname, changed_at = @lv_now WHERE req_id = @<r>-ReqId.
+        UPDATE zmmrouteconf_req SET line_status = @gc_st_approved, changed_by = @sy-uname, changed_at = @lv_now WHERE req_id = @<r>-ReqId.
       ENDIF.
 
 
@@ -305,13 +313,13 @@ CLASS lhc_Req IMPLEMENTATION.
         LOOP AT lt_fi_req ASSIGNING FIELD-SYMBOL(<fi>).
 
           ls_audit_log-client      = sy-mandt.
-          ls_audit_log-log_id      = cl_system_uuid=>create_uuid_x16_static( ).
+          TRY. ls_audit_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
           ls_audit_log-req_id      = <r>-ReqId.
           ls_audit_log-conf_id     = <fi>-conf_id.
           ls_audit_log-module_id   = 'FI'.
           ls_audit_log-action_type = 'APPROVE'.
           ls_audit_log-table_name  = 'Z_FI_LIMIT_CONF'.
-          ls_audit_log-env_id      = <fi>-env_id.
+          ls_audit_log-env_id      = lc_env_dev.
           ls_audit_log-object_key  = <fi>-item_id.
           ls_audit_log-old_data    = |\{"EXPENSE_TYPE":"{ <fi>-old_expense_type }","GL_ACCOUNT":"{ <fi>-old_gl_account }","AUTO_APPR_LIM":"{ <fi>-old_auto_appr_lim }","CURRENCY":"{ <fi>-old_currency }"\}|.
           ls_audit_log-new_data    = |\{"EXPENSE_TYPE":"{ <fi>-expense_type }","GL_ACCOUNT":"{ <fi>-gl_account }","AUTO_APPR_LIM":"{ <fi>-auto_appr_lim }","CURRENCY":"{ <fi>-currency }"\}|.
@@ -320,20 +328,21 @@ CLASS lhc_Req IMPLEMENTATION.
           APPEND ls_audit_log TO lt_audit_log.
           CLEAR ls_audit_log.
 
+          CLEAR lv_record_exists.
           CASE <fi>-action_type.
             WHEN 'U'.
-              SELECT SINGLE @abap_true FROM zfilimitconf WHERE item_id = @<fi>-source_item_id INTO @DATA(lv_fi_exists).
-              IF lv_fi_exists = abap_true.
+              SELECT SINGLE @abap_true FROM zfilimitconf WHERE item_id = @<fi>-source_item_id INTO @lv_record_exists.
+              IF lv_record_exists = abap_true.
                 UPDATE zfilimitconf SET
-                  env_id = @<fi>-env_id,
-                  expense_type = @<fi>-expense_type,
-                  gl_account = @<fi>-gl_account,
+                  env_id        = @lc_env_dev,
+                  expense_type  = @<fi>-expense_type,
+                  gl_account    = @<fi>-gl_account,
                   auto_appr_lim = @<fi>-auto_appr_lim,
-                  currency = @<fi>-currency,
-                  version_no = @<fi>-version_no,
-                  req_id = @<r>-ReqId,
-                  changed_by = @sy-uname,
-                  changed_at = @lv_now
+                  currency      = @<fi>-currency,
+                  version_no    = @<fi>-version_no,
+                  req_id        = @<r>-ReqId,
+                  changed_by    = @sy-uname,
+                  changed_at    = @lv_now
                 WHERE item_id = @<fi>-source_item_id.
               ENDIF.
             WHEN 'C'.
@@ -341,7 +350,7 @@ CLASS lhc_Req IMPLEMENTATION.
                 client        = sy-mandt
                 item_id       = <fi>-item_id
                 req_id        = <r>-ReqId
-                env_id        = <fi>-env_id
+                env_id        = lc_env_dev
                 expense_type  = <fi>-expense_type
                 gl_account    = <fi>-gl_account
                 auto_appr_lim = <fi>-auto_appr_lim
@@ -354,7 +363,7 @@ CLASS lhc_Req IMPLEMENTATION.
               DELETE FROM zfilimitconf WHERE item_id = @<fi>-source_item_id.
           ENDCASE.
         ENDLOOP.
-        UPDATE zfilimitreq SET line_status = 'A', changed_by = @sy-uname, changed_at = @lv_now WHERE req_id = @<r>-ReqId.
+        UPDATE zfilimitreq SET line_status = @gc_st_approved, changed_by = @sy-uname, changed_at = @lv_now WHERE req_id = @<r>-ReqId.
       ENDIF.
 
 
@@ -366,13 +375,13 @@ CLASS lhc_Req IMPLEMENTATION.
         LOOP AT lt_sd_req ASSIGNING FIELD-SYMBOL(<sd>).
 
           ls_audit_log-client      = sy-mandt.
-          ls_audit_log-log_id      = cl_system_uuid=>create_uuid_x16_static( ).
+          TRY. ls_audit_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
           ls_audit_log-req_id      = <r>-ReqId.
           ls_audit_log-conf_id     = <sd>-conf_id.
           ls_audit_log-module_id   = 'SD'.
           ls_audit_log-action_type = 'APPROVE'.
           ls_audit_log-table_name  = 'Z_SD_PRICE_CONF'.
-          ls_audit_log-env_id      = <sd>-env_id.
+          ls_audit_log-env_id      = lc_env_dev.
           ls_audit_log-object_key  = <sd>-item_id.
           ls_audit_log-old_data    = |\{"BRANCH_ID":"{ <sd>-old_branch_id }","CUST_GROUP":"{ <sd>-old_cust_group }","MATERIAL_GRP":"{ <sd>-old_material_grp }","MAX_DISCOUNT":"{ <sd>-old_max_discount }","MIN_ORDER_VAL":"{ <sd>-old_min_order_val }"\}|.
           ls_audit_log-new_data    = |\{"BRANCH_ID":"{ <sd>-branch_id }","CUST_GROUP":"{ <sd>-cust_group }","MATERIAL_GRP":"{ <sd>-material_grp }","MAX_DISCOUNT":"{ <sd>-max_discount }","MIN_ORDER_VAL":"{ <sd>-min_order_val }"\}|.
@@ -381,24 +390,25 @@ CLASS lhc_Req IMPLEMENTATION.
           APPEND ls_audit_log TO lt_audit_log.
           CLEAR ls_audit_log.
 
+          CLEAR lv_record_exists.
           CASE <sd>-action_type.
             WHEN 'U'.
-              SELECT SINGLE @abap_true FROM zsd_price_conf WHERE item_id = @<sd>-source_item_id INTO @DATA(lv_sd_exists).
-              IF lv_sd_exists = abap_true.
+              SELECT SINGLE @abap_true FROM zsd_price_conf WHERE item_id = @<sd>-source_item_id INTO @lv_record_exists.
+              IF lv_record_exists = abap_true.
                 UPDATE zsd_price_conf SET
-                  env_id = @<sd>-env_id,
-                  branch_id = @<sd>-branch_id,
-                  cust_group = @<sd>-cust_group,
-                  material_grp = @<sd>-material_grp,
-                  max_discount = @<sd>-max_discount,
+                  env_id        = @lc_env_dev,
+                  branch_id     = @<sd>-branch_id,
+                  cust_group    = @<sd>-cust_group,
+                  material_grp  = @<sd>-material_grp,
+                  max_discount  = @<sd>-max_discount,
                   min_order_val = @<sd>-min_order_val,
-                  currency = @<sd>-currency,
-                  valid_from = @<sd>-valid_from,
-                  valid_to = @<sd>-valid_to,
-                  version_no = @<sd>-version_no,
-                  req_id = @<r>-ReqId,
-                  changed_by = @sy-uname,
-                  changed_at = @lv_now
+                  currency      = @<sd>-currency,
+                  valid_from    = @<sd>-valid_from,
+                  valid_to      = @<sd>-valid_to,
+                  version_no    = @<sd>-version_no,
+                  req_id        = @<r>-ReqId,
+                  changed_by    = @sy-uname,
+                  changed_at    = @lv_now
                 WHERE item_id = @<sd>-source_item_id.
               ENDIF.
             WHEN 'C'.
@@ -406,7 +416,7 @@ CLASS lhc_Req IMPLEMENTATION.
                 client        = sy-mandt
                 item_id       = <sd>-item_id
                 req_id        = <r>-ReqId
-                env_id        = <sd>-env_id
+                env_id        = lc_env_dev
                 branch_id     = <sd>-branch_id
                 cust_group    = <sd>-cust_group
                 material_grp  = <sd>-material_grp
@@ -423,14 +433,9 @@ CLASS lhc_Req IMPLEMENTATION.
               DELETE FROM zsd_price_conf WHERE item_id = @<sd>-source_item_id.
           ENDCASE.
         ENDLOOP.
-        UPDATE zsd_price_req SET line_status = 'A', changed_by = @sy-uname, changed_at = @lv_now WHERE req_id = @<r>-ReqId.
+        UPDATE zsd_price_req SET line_status = @gc_st_approved, changed_by = @sy-uname, changed_at = @lv_now WHERE req_id = @<r>-ReqId.
       ENDIF.
 
-
-      " Cập nhật line_status → APPROVED cho tất cả req lines của request safe stock (như code gốc)
-      UPDATE zmmsafestock_req SET line_status = @gc_st_approved, changed_by = @sy-uname, changed_at = @lv_now WHERE req_id = @<r>-ReqId.
-
-    " -------------------------------------------------------------
     ENDLOOP.
 
     " 7. INSERT TOÀN BỘ LOG XUỐNG DỮ LIỆU CHỈ TRONG 1 LẦN DUY NHẤT
@@ -637,12 +642,11 @@ CLASS lhc_Req IMPLEMENTATION.
       CONTINUE.
     ENDIF.
 
-    " ── Tạo REQ_ID mới + header mới cho env đích ──
-    DATA(lv_new_req_id) = cl_system_uuid=>create_uuid_x16_static( ).
+
 
     INSERT zconfreqh FROM @( VALUE zconfreqh(
       client      = sy-mandt
-      req_id      = lv_new_req_id
+      req_id      = <r>-ReqId
       conf_id     = <r>-ConfId
       env_id      = lv_next_env
       module_id   = <r>-ModuleId
@@ -665,7 +669,7 @@ CLASS lhc_Req IMPLEMENTATION.
       INSERT zmmsafestock FROM @( VALUE zmmsafestock(
         client     = sy-mandt
         item_id    = cl_system_uuid=>create_uuid_x16_static( )
-        req_id     = lv_new_req_id
+        req_id     = <r>-ReqId
         env_id     = lv_next_env
         plant_id   = <ss>-plant_id
         mat_group  = <ss>-mat_group
@@ -683,7 +687,7 @@ CLASS lhc_Req IMPLEMENTATION.
       INSERT zmmrouteconf FROM @( VALUE zmmrouteconf(
         client       = sy-mandt
         item_id      = cl_system_uuid=>create_uuid_x16_static( )
-        req_id       = lv_new_req_id
+        req_id       = <r>-ReqId
         env_id       = lv_next_env
         plant_id     = <rt>-plant_id
         send_wh      = <rt>-send_wh
@@ -704,7 +708,7 @@ CLASS lhc_Req IMPLEMENTATION.
       INSERT zfilimitconf FROM @( VALUE zfilimitconf(
         client        = sy-mandt
         item_id       = cl_system_uuid=>create_uuid_x16_static( )
-        req_id        = lv_new_req_id
+        req_id        = <r>-ReqId
         env_id        = lv_next_env
         expense_type  = <fi>-expense_type
         gl_account    = <fi>-gl_account
@@ -723,7 +727,7 @@ CLASS lhc_Req IMPLEMENTATION.
       INSERT zsd_price_conf FROM @( VALUE zsd_price_conf(
         client        = sy-mandt
         item_id       = cl_system_uuid=>create_uuid_x16_static( )
-        req_id        = lv_new_req_id
+        req_id        = <r>-ReqId
         env_id        = lv_next_env
         branch_id     = <sd>-branch_id
         cust_group    = <sd>-cust_group
@@ -741,7 +745,7 @@ CLASS lhc_Req IMPLEMENTATION.
     " ── Audit log ──
     TRY.
         DATA(ls_new_hdr) = VALUE zconfreqh(
-          req_id      = lv_new_req_id
+          req_id      = <r>-ReqId
           env_id      = lv_next_env
           status      = gc_st_active
           module_id   = <r>-ModuleId
@@ -749,12 +753,13 @@ CLASS lhc_Req IMPLEMENTATION.
 
         zcl_gsp26_rule_writer=>log_audit_entry(
           iv_conf_id  = <r>-ConfId
-          iv_req_id   = lv_new_req_id
+          iv_req_id   = <r>-ReqId
           iv_mod_id   = <r>-ModuleId
           iv_act_type = 'PROMOTE'
           iv_tab_name = 'ZCONFREQH'
           iv_env_id   = lv_next_env
-          is_new_data = ls_new_hdr ).
+          is_new_data = VALUE #( BASE <r> Status = gc_st_active
+                                 EnvId  = lv_next_env ) ).
       CATCH cx_root INTO DATA(lx_audit).
         APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
           severity = if_abap_behv_message=>severity-warning

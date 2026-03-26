@@ -8,6 +8,7 @@ define view entity ZC_CONF_REQ_I
 {
   key ReqItemId,
       ReqId,
+      EnvId,
       ConfId,
       Action,
       TargetEnvId,

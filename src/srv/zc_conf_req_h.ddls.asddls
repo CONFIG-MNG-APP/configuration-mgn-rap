@@ -6,9 +6,9 @@ define root view entity ZC_CONF_REQ_H
   provider contract transactional_query
   as projection on ZIR_CONF_REQ_H
 {
-  key ReqId,
+  key ReqId,  
+  key EnvId,
       ConfId,
-      EnvId,
       ModuleId,
       ReqTitle,
       Description,

@@ -15,8 +15,8 @@ define root view entity ZIR_CONF_REQ_H
 {
 
   key h.req_id            as ReqId,
+  key h.env_id            as EnvId,
       h.conf_id           as ConfId,
-      h.env_id            as EnvId,
       h.module_id         as ModuleId,
       h.req_title         as ReqTitle,
       h.description       as Description,

@@ -9,7 +9,8 @@
 }
 define view entity ZI_CONF_REQ_I
   as select from zconfreqi
-  association        to parent ZIR_CONF_REQ_H as _Header    on $projection.ReqId = _Header.ReqId
+  association to parent ZIR_CONF_REQ_H as _Header on  $projection.ReqId  = _Header.ReqId
+                                                 and $projection.EnvId  = _Header.EnvId
 
   association [1..1] to ZI_CONF_CATALOG       as _Catalog   on $projection.ConfId = _Catalog.ConfId
 
@@ -18,6 +19,7 @@ define view entity ZI_CONF_REQ_I
   key req_item_id       as ReqItemId,
 
       req_id            as ReqId,
+      env_id            as EnvId,
       conf_id           as ConfId,
       action            as Action,
       target_env_id     as TargetEnvId,

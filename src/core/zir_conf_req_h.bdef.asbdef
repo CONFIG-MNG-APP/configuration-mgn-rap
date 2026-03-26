@@ -95,7 +95,7 @@ etag master ChangedAt
   field ( numbering : managed, readonly ) ReqItemId;
 
   // FK theo composition
-  field ( readonly : update ) ReqId;
+  field ( readonly : update ) ReqId, Envid;
 
   field ( readonly )
   CreatedBy, CreatedAt,
@@ -109,6 +109,7 @@ etag master ChangedAt
   {
     ReqItemId = req_item_id;
     ReqId = req_id;
+    Envid = env_id;
     ConfId = conf_id;
     Action = action;
     TargetEnvId = target_env_id;
