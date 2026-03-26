@@ -17,6 +17,10 @@ CLASS zcl_gsp26_rule_writer IMPLEMENTATION.
     " Lấy timestamp chính xác cho bảng ZAUDITLOG
     GET TIME STAMP FIELD DATA(lv_timestamp).
 
+    " Serialize dữ liệu Object/Table thành Raw JSON 1 dòng (Hoạt động hoàn hảo mọi phiên bản)
+    DATA(lv_old_json) = /ui2/cl_json=>serialize( data = is_old_data ).
+    DATA(lv_new_json) = /ui2/cl_json=>serialize( data = is_new_data ).
+
     DATA(ls_audit) = VALUE zauditlog(
       log_id      = cl_system_uuid=>create_uuid_x16_static( )
       req_id      = iv_req_id
@@ -25,13 +29,13 @@ CLASS zcl_gsp26_rule_writer IMPLEMENTATION.
       action_type = iv_act_type
       table_name  = iv_tab_name
       env_id      = iv_env_id
-      " Serialize data sang JSON để lưu trữ linh hoạt
-      old_data    = /ui2/cl_json=>serialize( data = is_old_data )
-      new_data    = /ui2/cl_json=>serialize( data = is_new_data )
-      changed_by  = sy-uname " Ghi nhận User thực hiện
+      old_data    = lv_old_json
+      new_data    = lv_new_json
+      changed_by  = sy-uname
       changed_at  = lv_timestamp
     ).
 
     INSERT zauditlog FROM @ls_audit.
   ENDMETHOD.
 ENDCLASS.
+

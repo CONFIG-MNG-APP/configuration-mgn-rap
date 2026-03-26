@@ -9,5 +9,6 @@
 }
 define view entity ZC_VH_TRANS_MODE as select from ZI_VH_TRANS_MODE
 {
-  key TransMode
+  key TransMode,
+      Description
 }

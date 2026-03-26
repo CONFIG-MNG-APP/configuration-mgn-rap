@@ -177,6 +177,7 @@ CLASS lhc_RouteConf IMPLEMENTATION.
 
     LOOP AT lt_data ASSIGNING FIELD-SYMBOL(<r>).
 
+      " ── Required fields (CREATE) ─────────────────────────────────────────
       IF <r>-ActionType = 'C'.
         IF <r>-ReqId IS INITIAL OR
            <r>-EnvId IS INITIAL OR
@@ -186,7 +187,6 @@ CLASS lhc_RouteConf IMPLEMENTATION.
            <r>-TransMode IS INITIAL.
 
           APPEND VALUE #( %tky = <r>-%tky ) TO failed-RouteConf.
-
           APPEND VALUE #(
             %tky = <r>-%tky
             %msg = new_message_with_text(
@@ -196,11 +196,88 @@ CLASS lhc_RouteConf IMPLEMENTATION.
         ENDIF.
       ENDIF.
 
+      " ── Required fields (UPDATE) ─────────────────────────────────────────
+      IF <r>-ActionType = 'U'.
+        IF <r>-PlantId IS INITIAL OR
+           <r>-SendWh IS INITIAL OR
+           <r>-ReceiveWh IS INITIAL OR
+           <r>-TransMode IS INITIAL.
+
+          APPEND VALUE #( %tky = <r>-%tky ) TO failed-RouteConf.
+          APPEND VALUE #(
+            %tky = <r>-%tky
+            %msg = new_message_with_text(
+                     severity = if_abap_behv_message=>severity-error
+                     text     = |Mandatory fields missing for UPDATE.| ) )
+            TO reported-RouteConf.
+        ENDIF.
+      ENDIF.
+
+      " ── Plant existence check (CREATE + UPDATE) ──────────────────────────
+      IF ( <r>-ActionType = 'C' OR <r>-ActionType = 'U' )
+         AND <r>-PlantId IS NOT INITIAL.
+
+        SELECT SINGLE @abap_true
+          FROM zplantunit
+          WHERE plant_id = @<r>-PlantId
+          INTO @DATA(lv_plant_exists).
+
+        IF lv_plant_exists <> abap_true.
+          APPEND VALUE #( %tky = <r>-%tky ) TO failed-RouteConf.
+          APPEND VALUE #(
+            %tky = <r>-%tky
+            %msg = new_message_with_text(
+                     severity = if_abap_behv_message=>severity-error
+                     text     = |Plant '{ <r>-PlantId }' does not exist.| ) )
+            TO reported-RouteConf.
+        ENDIF.
+      ENDIF.
+
+      " ── Inspector existence check (CREATE + UPDATE, only if provided) ────
+      IF ( <r>-ActionType = 'C' OR <r>-ActionType = 'U' )
+         AND <r>-InspectorId IS NOT INITIAL.
+
+        SELECT SINGLE @abap_true
+          FROM zuserrole
+          WHERE user_id = @<r>-InspectorId
+          INTO @DATA(lv_inspector_exists).
+
+        IF lv_inspector_exists <> abap_true.
+          APPEND VALUE #( %tky = <r>-%tky ) TO failed-RouteConf.
+          APPEND VALUE #(
+            %tky = <r>-%tky
+            %msg = new_message_with_text(
+                     severity = if_abap_behv_message=>severity-error
+                     text     = |Inspector '{ <r>-InspectorId }' is not a registered user.| ) )
+            TO reported-RouteConf.
+        ENDIF.
+      ENDIF.
+
+      " ── Transport Mode existence check (CREATE + UPDATE) ────────────────
+      IF ( <r>-ActionType = 'C' OR <r>-ActionType = 'U' )
+         AND <r>-TransMode IS NOT INITIAL.
+
+        SELECT SINGLE @abap_true
+          FROM ztransmode
+          WHERE trans_mode = @<r>-TransMode AND is_active = @abap_true
+          INTO @DATA(lv_trans_exists).
+
+        IF lv_trans_exists <> abap_true.
+          APPEND VALUE #( %tky = <r>-%tky ) TO failed-RouteConf.
+          APPEND VALUE #(
+            %tky = <r>-%tky
+            %msg = new_message_with_text(
+                     severity = if_abap_behv_message=>severity-error
+                     text     = |Transport Mode '{ <r>-TransMode }' is not valid.| ) )
+            TO reported-RouteConf.
+        ENDIF.
+      ENDIF.
+
+      " ── SourceItemId checks (UPDATE / DELETE) ────────────────────────────
       IF ( <r>-ActionType = 'U' OR <r>-ActionType = 'X' )
          AND <r>-SourceItemId IS INITIAL.
 
         APPEND VALUE #( %tky = <r>-%tky ) TO failed-RouteConf.
-
         APPEND VALUE #(
           %tky = <r>-%tky
           %msg = new_message_with_text(
@@ -219,7 +296,6 @@ CLASS lhc_RouteConf IMPLEMENTATION.
 
         IF sy-subrc <> 0.
           APPEND VALUE #( %tky = <r>-%tky ) TO failed-RouteConf.
-
           APPEND VALUE #(
             %tky = <r>-%tky
             %msg = new_message_with_text(

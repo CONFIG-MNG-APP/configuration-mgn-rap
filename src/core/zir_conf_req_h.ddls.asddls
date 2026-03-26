@@ -2,7 +2,10 @@
 @EndUserText.label: 'Conf Req Header (Interface)'
 @Metadata.ignorePropagatedAnnotations: true
 define root view entity ZIR_CONF_REQ_H
-  as select from zconfreqh
+  as select from zconfreqh as h
+     left outer join zuserrole as r
+       on  r.user_id   = $session.user
+       and r.is_active = 'X'
 
   composition [0..*] of ZI_CONF_REQ_I   as _Items
 
@@ -11,43 +14,46 @@ define root view entity ZIR_CONF_REQ_H
   association [0..1] to ZI_CONF_CATALOG as _Catalog on $projection.ConfId = _Catalog.ConfId
 {
 
-  key req_id            as ReqId,
-      conf_id           as ConfId,
-      env_id            as EnvId,
-      module_id         as ModuleId,
-      req_title         as ReqTitle,
-      description       as Description,
-      status            as Status,
-      case status
+  key h.req_id            as ReqId,
+      h.conf_id           as ConfId,
+      h.env_id            as EnvId,
+      h.module_id         as ModuleId,
+      h.req_title         as ReqTitle,
+      h.description       as Description,
+      h.status            as Status,
+      case h.status
         when 'S' then 2 -- Màu vàng: Chờ duyệt (Submitted)
         when 'A' then 3 -- Màu xanh lá: Đã duyệt (Approved)
         when 'R' then 1 -- Màu đỏ: Từ chối (Rejected)
         else 0          -- Không màu/Xám: Nháp (Draft)
-      end               as StatusCriticality,
-      reason            as Reason,
+      end                 as StatusCriticality,
+      h.reason            as Reason,
 
-      _Catalog.ConfName as ConfName,
-      _Catalog.TargetCds as TargetCds,
+      _Catalog.ConfName   as ConfName,
+      _Catalog.TargetCds  as TargetCds,
 
       /* Admin */
       @Semantics.user.createdBy: true
-      created_by        as CreatedBy,
+      h.created_by        as CreatedBy,
 
       @Semantics.systemDateTime.createdAt: true
-      created_at        as CreatedAt,
+      h.created_at        as CreatedAt,
 
       @Semantics.user.lastChangedBy: true
-      changed_by        as ChangedBy,
+      h.changed_by        as ChangedBy,
 
       @Semantics.systemDateTime.lastChangedAt: true
-      changed_at        as ChangedAt,
+      h.changed_at        as ChangedAt,
 
-      approved_by       as ApprovedBy,
-      approved_at       as ApprovedAt,
+      h.approved_by       as ApprovedBy,
+      h.approved_at       as ApprovedAt,
 
-      rejected_by       as RejectedBy,
-      rejected_at       as RejectedAt,
+      h.rejected_by       as RejectedBy,
+      h.rejected_at       as RejectedAt,
 
       _Items,
       _Env
 }
+where h.created_by = $session.user   -- Key User: chỉ thấy request của mình
+   or r.role_level  = 'MANAGER'      -- Manager: thấy tất cả
+   or r.role_level  = 'IT ADMIN'     -- IT Admin: thấy tất cả

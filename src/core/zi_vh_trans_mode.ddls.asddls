@@ -7,7 +7,9 @@
     sizeCategory: #S,
     dataClass: #MIXED
 }
-define view entity ZI_VH_TRANS_MODE as select from zmmrouteconf
+define view entity ZI_VH_TRANS_MODE as select from ztransmode
 {
-  key trans_mode as TransMode
-} group by trans_mode
+  key trans_mode   as TransMode,
+      description  as Description,
+      is_active   as IsActive
+}
