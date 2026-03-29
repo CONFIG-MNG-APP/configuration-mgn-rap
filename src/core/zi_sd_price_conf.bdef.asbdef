@@ -13,10 +13,12 @@ etag master ChangedAt
   update;
   delete;
 
-  field ( readonly, numbering : managed ) ReqId, ReqItemId;
+  field ( readonly : update ) ReqId;
+  field ( readonly : update ) ReqItemId;
   field ( readonly, numbering : managed ) ItemId;
 
-  field ( readonly ) SourceItemId, ConfId;
+  field ( readonly : update ) SourceItemId;
+  field ( readonly : update ) ConfId;
 
   field ( readonly )
   OldBranchId,
@@ -36,12 +38,15 @@ etag master ChangedAt
 
   field ( mandatory ) EnvId, BranchId, CustGroup;
 
-  determination set_defaults on modify { create; }
+  determination set_defaults on modify { field SourceItemId, ActionType; }
+  determination setAdminFields on modify { field EnvId, BranchId, CustGroup,
+    MaterialGrp, MaxDiscount, MinOrderVal, ApproverGrp,
+    Currency, ValidFrom, ValidTo, ChangeNote; }
   validation validate_mandatory on save { create; update; }
   validation validate_dates on save { create; update; }
   validation validate_business on save { create; update; }
 
-  action approve result [1] $self;
+  action ( features : instance ) approve result [1] $self;
 
   draft action Edit;
   draft action Activate;

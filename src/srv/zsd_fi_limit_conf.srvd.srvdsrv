@@ -1,4 +1,8 @@
 @EndUserText.label: 'Service for FI Limit Config'
 define service ZSD_FI_LIMIT_CONF {
-  expose ZC_FI_LIMIT_CONF;
+  expose ZC_FI_LIMIT_CONF as FILimitConf;
+  expose ZC_FI_LIMIT_MAIN as FILimitMain;
+  expose ZC_ENV_DEF as EnvDef;
+  expose ZC_VH_EXPENSE_TYPE as ExpenseTypeDef;
+  expose ZC_VH_GL_ACCOUNT as GlAccountDef;
 }

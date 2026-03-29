@@ -24,8 +24,8 @@ CLASS lhc_Req DEFINITION INHERITING FROM cl_abap_behavior_handler.
     METHODS reject FOR MODIFY IMPORTING keys FOR ACTION Req~reject RESULT result.
     METHODS submit FOR MODIFY IMPORTING keys FOR ACTION Req~submit RESULT result.
     METHODS promote FOR MODIFY IMPORTING keys FOR ACTION Req~promote RESULT result.
-     METHODS apply FOR MODIFY IMPORTING keys FOR ACTION Req~apply RESULT
-  result.
+    METHODS apply FOR MODIFY IMPORTING keys FOR ACTION Req~apply RESULT
+                                         result.
     METHODS rollback FOR MODIFY IMPORTING keys FOR ACTION Req~rollback RESULT result.
     METHODS createRequest FOR MODIFY IMPORTING keys FOR ACTION Req~createRequest RESULT result.
     METHODS updateReason FOR MODIFY IMPORTING keys FOR ACTION Req~updateReason RESULT result.
@@ -84,9 +84,63 @@ CLASS lhc_Req IMPLEMENTATION.
 
 
   METHOD get_instance_features.
+    " 1. Đọc trạng thái (Status) hiện tại của các Yêu cầu (Request) đang hiển thị trên UI
+    READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
+      ENTITY Req FIELDS ( Status ) WITH CORRESPONDING #( keys )
+      RESULT DATA(lt_reqs).
+
+    " 2. Gán Rule Đóng/Mở các action (Enable/Disable nút) tùy thuộc vào Status
+    LOOP AT lt_reqs INTO DATA(ls_req).
+
+      " Khởi tạo: Mặc định khoá xám xịt (Disabled) toàn bộ các nút
+      " CHÚ Ý CÓ DẤU CÁCH TRƯỚC VÀ SAU DẤU BẰNG
+      DATA(lv_approve)  = if_abap_behv=>fc-o-disabled.
+      DATA(lv_reject)   = if_abap_behv=>fc-o-disabled.
+      DATA(lv_submit)   = if_abap_behv=>fc-o-disabled.
+      DATA(lv_promote)  = if_abap_behv=>fc-o-disabled.
+      DATA(lv_apply)    = if_abap_behv=>fc-o-disabled.
+      DATA(lv_rollback) = if_abap_behv=>fc-o-disabled.
+
+      " Kiểm tra trạng thái hiện tại để mở khoá (Enable) nút tương ứng
+      CASE condense( ls_req-Status ).
+
+        WHEN gc_st_draft OR gc_st_rolled_back.
+          lv_submit  = if_abap_behv=>fc-o-enabled.
+
+        WHEN gc_st_submitted.
+          lv_approve = if_abap_behv=>fc-o-enabled.
+          lv_reject  = if_abap_behv=>fc-o-enabled.
+
+        WHEN gc_st_approved.
+          lv_promote  = if_abap_behv=>fc-o-enabled.
+          lv_apply    = if_abap_behv=>fc-o-enabled.
+          lv_rollback = if_abap_behv=>fc-o-enabled.
+
+        WHEN gc_st_active.
+          lv_promote  = if_abap_behv=>fc-o-enabled.
+          lv_rollback = if_abap_behv=>fc-o-enabled.
+
+        WHEN gc_st_rejected.
+          " Trống, mặc định tất cả action đều bị disable
+
+      ENDCASE.
+
+      " 3. Trả về cho UI5 Fiori kết quả đóng/mở cụ thể
+      APPEND VALUE #( %tky             = ls_req-%tky
+                      %action-approve  = lv_approve
+                      %action-reject   = lv_reject
+                      %action-submit   = lv_submit
+                      %action-promote  = lv_promote
+                      %action-apply    = lv_apply
+                      %action-rollback = lv_rollback
+                    ) TO result.
+
+    ENDLOOP.
   ENDMETHOD.
 
-    METHOD approve.
+
+
+  METHOD approve.
     DATA: lv_now TYPE timestampl.
     GET TIME STAMP FIELD lv_now.
 
@@ -94,9 +148,15 @@ CLASS lhc_Req IMPLEMENTATION.
     CONSTANTS: lc_env_dev TYPE string VALUE 'DEV'.
 
     " Mảng chứa toàn bộ Log (Header + Items) để Insert 1 lần duy nhất
-    DATA: lt_audit_log TYPE STANDARD TABLE OF zauditlog,
-          ls_audit_log TYPE zauditlog,
+    DATA: lt_audit_log     TYPE STANDARD TABLE OF zauditlog,
+          ls_audit_log     TYPE zauditlog,
           lv_record_exists TYPE abap_boolean. " Khai báo biến check tồn tại 1 lần duy nhất
+
+    " Khai báo biến cho Push Notification
+    DATA: lt_notifications TYPE /iwngw/if_notif_provider=>ty_t_notification,
+          ls_notification  TYPE /iwngw/if_notif_provider=>ty_s_notification,
+          lt_recipients    TYPE /iwngw/if_notif_provider=>ty_t_notification_recipient,
+          ls_recipient     TYPE /iwngw/if_notif_provider=>ty_s_notification_recipient.
 
     " 1. Đọc dữ liệu Header và Items kèm theo
     READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
@@ -436,6 +496,58 @@ CLASS lhc_Req IMPLEMENTATION.
         UPDATE zsd_price_req SET line_status = @gc_st_approved, changed_by = @sy-uname, changed_at = @lv_now WHERE req_id = @<r>-ReqId.
       ENDIF.
 
+      " =============================================================
+      " 🚀 PUSH NOTIFICATION: THÔNG BÁO CHO NGƯỜI TẠO REQUEST
+      " =============================================================
+      CLEAR: lt_notifications, lt_recipients, ls_notification, ls_recipient.
+
+      " 1. Xác định Người Nhận (Gửi ngược lại cho người tạo phiếu)
+      ls_recipient-id = <r>-CreatedBy.
+      APPEND ls_recipient TO lt_recipients.
+
+      " 2. Khởi tạo dữ liệu Thông báo
+      TRY.
+          ls_notification-id = cl_system_uuid=>create_uuid_x16_static( ).
+        CATCH cx_uuid_error.
+      ENDTRY.
+
+      ls_notification-type_key     = 'REQ_APPROVED'. " Khớp với Type ID định nghĩa trong Class Provider
+      ls_notification-type_version = '1'.
+      ls_notification-priority     = /iwngw/if_notif_provider=>gcs_priorities-low.
+      ls_notification-recipients   = lt_recipients.
+
+      " 3. Truyền giá trị cho biến {ReqTitle}
+      " SỬA LỖI: Cấu trúc parameters phải lồng thêm khai báo ngôn ngữ (language)
+      ls_notification-parameters = VALUE #(
+        ( language = sy-langu
+          parameters = VALUE #(
+            ( name = 'ReqTitle' value = CONV #( <r>-ReqTitle ) type = 'Edm.String' )
+          )
+        )
+      ).
+
+      " 4. Navigation (Click vào quả chuông mở App)
+      " LƯU Ý: Đảm bảo SemanticObject và Action khớp với manifest.json của App Manager
+      ls_notification-navigation_parameters = VALUE #(
+        ( name = 'SemanticObject' value = 'ConfigReq' )
+        ( name = 'Action'         value = 'manage' )
+        ( name = 'ReqId'          value = CONV #( <r>-ReqId ) )
+      ).
+
+      APPEND ls_notification TO lt_notifications.
+
+      " 5. BÓP CÒ BẮN THÔNG BÁO!
+      TRY.
+          /iwngw/cl_notification_api=>create_notifications(
+            EXPORTING
+              iv_provider_id  = 'ZGSP26SAP06_REQ_NOTIF' " Đúng cái ID bạn vừa Active
+              it_notification = lt_notifications
+          ).
+        CATCH /iwngw/cx_notification_api INTO DATA(lx_notif_error).
+          " Bắt lỗi ngầm để nếu lỗi Gateway cũng không làm hỏng tiến trình Approve
+      ENDTRY.
+      " =============================================================
+
     ENDLOOP.
 
     " 7. INSERT TOÀN BỘ LOG XUỐNG DỮ LIỆU CHỈ TRONG 1 LẦN DUY NHẤT
@@ -605,179 +717,179 @@ CLASS lhc_Req IMPLEMENTATION.
 
   ENDMETHOD.
 
-    METHOD promote.
-  DATA lv_now TYPE timestampl.
-  GET TIME STAMP FIELD lv_now.
+  METHOD promote.
+    DATA lv_now TYPE timestampl.
+    GET TIME STAMP FIELD lv_now.
 
-  READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
-    ENTITY Req ALL FIELDS WITH CORRESPONDING #( keys )
-    RESULT DATA(reqs).
+    READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
+      ENTITY Req ALL FIELDS WITH CORRESPONDING #( keys )
+      RESULT DATA(reqs).
 
-  LOOP AT reqs ASSIGNING FIELD-SYMBOL(<r>).
+    LOOP AT reqs ASSIGNING FIELD-SYMBOL(<r>).
 
-    " Chấp nhận cả APPROVED và ACTIVE
-    IF <r>-Status <> gc_st_approved AND <r>-Status <> gc_st_active.
-      APPEND VALUE #( %tky = <r>-%tky
-        %msg = new_message_with_text(
-          severity = if_abap_behv_message=>severity-error
-          text     = 'Promote chỉ được khi status là Approved hoặc Active' )
-      ) TO reported-req.
-      APPEND VALUE #( %tky = <r>-%tky ) TO failed-req.
-      CONTINUE.
-    ENDIF.
+      " Chấp nhận cả APPROVED và ACTIVE
+      IF <r>-Status <> gc_st_approved AND <r>-Status <> gc_st_active.
+        APPEND VALUE #( %tky = <r>-%tky
+          %msg = new_message_with_text(
+            severity = if_abap_behv_message=>severity-error
+            text     = 'Promote chỉ được khi status là Approved hoặc Active' )
+        ) TO reported-req.
+        APPEND VALUE #( %tky = <r>-%tky ) TO failed-req.
+        CONTINUE.
+      ENDIF.
 
-    " Xác định env tiếp theo
-    DATA(lv_next_env) = CONV zde_env_id( SWITCH #( condense( <r>-EnvId )
-      WHEN 'DEV' THEN 'QAS'
-      WHEN 'QAS' THEN 'PRD'
-      ELSE '' ) ).
+      " Xác định env tiếp theo
+      DATA(lv_next_env) = CONV zde_env_id( SWITCH #( condense( <r>-EnvId )
+        WHEN 'DEV' THEN 'QAS'
+        WHEN 'QAS' THEN 'PRD'
+        ELSE '' ) ).
 
-    IF lv_next_env IS INITIAL.
-      APPEND VALUE #( %tky = <r>-%tky
-        %msg = new_message_with_text(
-          severity = if_abap_behv_message=>severity-error
-          text     = 'Request đã ở PRD, không thể promote tiếp.' )
-      ) TO reported-req.
-      APPEND VALUE #( %tky = <r>-%tky ) TO failed-req.
-      CONTINUE.
-    ENDIF.
+      IF lv_next_env IS INITIAL.
+        APPEND VALUE #( %tky = <r>-%tky
+          %msg = new_message_with_text(
+            severity = if_abap_behv_message=>severity-error
+            text     = 'Request đã ở PRD, không thể promote tiếp.' )
+        ) TO reported-req.
+        APPEND VALUE #( %tky = <r>-%tky ) TO failed-req.
+        CONTINUE.
+      ENDIF.
 
 
 
-    INSERT zconfreqh FROM @( VALUE zconfreqh(
-      client      = sy-mandt
-      req_id      = <r>-ReqId
-      conf_id     = <r>-ConfId
-      env_id      = lv_next_env
-      module_id   = <r>-ModuleId
-      req_title   = <r>-ReqTitle
-      description = <r>-Description
-      status      = gc_st_active
-      reason      = <r>-Reason
-      created_by  = sy-uname
-      created_at  = lv_now
-      changed_by  = sy-uname
-      changed_at  = lv_now
-      approved_by = <r>-ApprovedBy
-      approved_at = <r>-ApprovedAt ) ).
+      INSERT zconfreqh FROM @( VALUE zconfreqh(
+        client      = sy-mandt
+        req_id      = <r>-ReqId
+        conf_id     = <r>-ConfId
+        env_id      = lv_next_env
+        module_id   = <r>-ModuleId
+        req_title   = <r>-ReqTitle
+        description = <r>-Description
+        status      = gc_st_active
+        reason      = <r>-Reason
+        created_by  = sy-uname
+        created_at  = lv_now
+        changed_by  = sy-uname
+        changed_at  = lv_now
+        approved_by = <r>-ApprovedBy
+        approved_at = <r>-ApprovedAt ) ).
 
-    " ── Copy MM SafeStock: luôn INSERT mới, chỉ đổi env_id và req_id ──
-    SELECT * FROM zmmsafestock
-      WHERE req_id = @<r>-ReqId AND env_id = @<r>-EnvId
-      INTO TABLE @DATA(lt_ss).
-    LOOP AT lt_ss ASSIGNING FIELD-SYMBOL(<ss>).
-      INSERT zmmsafestock FROM @( VALUE zmmsafestock(
-        client     = sy-mandt
-        item_id    = cl_system_uuid=>create_uuid_x16_static( )
-        req_id     = <r>-ReqId
-        env_id     = lv_next_env
-        plant_id   = <ss>-plant_id
-        mat_group  = <ss>-mat_group
-        min_qty    = <ss>-min_qty
-        version_no = 1
-        created_by = sy-uname  created_at = lv_now
-        changed_by = sy-uname  changed_at = lv_now ) ).
+      " ── Copy MM SafeStock: luôn INSERT mới, chỉ đổi env_id và req_id ──
+      SELECT * FROM zmmsafestock
+        WHERE req_id = @<r>-ReqId AND env_id = @<r>-EnvId
+        INTO TABLE @DATA(lt_ss).
+      LOOP AT lt_ss ASSIGNING FIELD-SYMBOL(<ss>).
+        INSERT zmmsafestock FROM @( VALUE zmmsafestock(
+          client     = sy-mandt
+          item_id    = cl_system_uuid=>create_uuid_x16_static( )
+          req_id     = <r>-ReqId
+          env_id     = lv_next_env
+          plant_id   = <ss>-plant_id
+          mat_group  = <ss>-mat_group
+          min_qty    = <ss>-min_qty
+          version_no = 1
+          created_by = sy-uname  created_at = lv_now
+          changed_by = sy-uname  changed_at = lv_now ) ).
+      ENDLOOP.
+
+      " ── Copy MM Route: luôn INSERT mới, chỉ đổi env_id và req_id ──
+      SELECT * FROM zmmrouteconf
+        WHERE req_id = @<r>-ReqId AND env_id = @<r>-EnvId
+        INTO TABLE @DATA(lt_rt).
+      LOOP AT lt_rt ASSIGNING FIELD-SYMBOL(<rt>).
+        INSERT zmmrouteconf FROM @( VALUE zmmrouteconf(
+          client       = sy-mandt
+          item_id      = cl_system_uuid=>create_uuid_x16_static( )
+          req_id       = <r>-ReqId
+          env_id       = lv_next_env
+          plant_id     = <rt>-plant_id
+          send_wh      = <rt>-send_wh
+          receive_wh   = <rt>-receive_wh
+          inspector_id = <rt>-inspector_id
+          trans_mode   = <rt>-trans_mode
+          is_allowed   = <rt>-is_allowed
+          version_no   = 1
+          created_by   = sy-uname  created_at = lv_now
+          changed_by   = sy-uname  changed_at = lv_now ) ).
+      ENDLOOP.
+
+      " ── Copy FI Limit: luôn INSERT mới, chỉ đổi env_id và req_id ──
+      SELECT * FROM zfilimitconf
+        WHERE req_id = @<r>-ReqId AND env_id = @<r>-EnvId
+        INTO TABLE @DATA(lt_fi).
+      LOOP AT lt_fi ASSIGNING FIELD-SYMBOL(<fi>).
+        INSERT zfilimitconf FROM @( VALUE zfilimitconf(
+          client        = sy-mandt
+          item_id       = cl_system_uuid=>create_uuid_x16_static( )
+          req_id        = <r>-ReqId
+          env_id        = lv_next_env
+          expense_type  = <fi>-expense_type
+          gl_account    = <fi>-gl_account
+          auto_appr_lim = <fi>-auto_appr_lim
+          currency      = <fi>-currency
+          version_no    = 1
+          created_by    = sy-uname  created_at = lv_now
+          changed_by    = sy-uname  changed_at = lv_now ) ).
+      ENDLOOP.
+
+      " ── Copy SD Price: luôn INSERT mới, chỉ đổi env_id và req_id ──
+      SELECT * FROM zsd_price_conf
+        WHERE req_id = @<r>-ReqId AND env_id = @<r>-EnvId
+        INTO TABLE @DATA(lt_sd).
+      LOOP AT lt_sd ASSIGNING FIELD-SYMBOL(<sd>).
+        INSERT zsd_price_conf FROM @( VALUE zsd_price_conf(
+          client        = sy-mandt
+          item_id       = cl_system_uuid=>create_uuid_x16_static( )
+          req_id        = <r>-ReqId
+          env_id        = lv_next_env
+          branch_id     = <sd>-branch_id
+          cust_group    = <sd>-cust_group
+          material_grp  = <sd>-material_grp
+          max_discount  = <sd>-max_discount
+          min_order_val = <sd>-min_order_val
+          currency      = <sd>-currency
+          valid_from    = <sd>-valid_from
+          valid_to      = <sd>-valid_to
+          version_no    = 1
+          created_by    = sy-uname  created_at = lv_now
+          changed_by    = sy-uname  changed_at = lv_now ) ).
+      ENDLOOP.
+
+      " ── Audit log ──
+      TRY.
+          DATA(ls_new_hdr) = VALUE zconfreqh(
+            req_id      = <r>-ReqId
+            env_id      = lv_next_env
+            status      = gc_st_active
+            module_id   = <r>-ModuleId
+            req_title   = <r>-ReqTitle ).
+
+          zcl_gsp26_rule_writer=>log_audit_entry(
+            iv_conf_id  = <r>-ConfId
+            iv_req_id   = <r>-ReqId
+            iv_mod_id   = <r>-ModuleId
+            iv_act_type = 'PROMOTE'
+            iv_tab_name = 'ZCONFREQH'
+            iv_env_id   = lv_next_env
+            is_new_data = VALUE #( BASE <r> Status = gc_st_active
+                                   EnvId  = lv_next_env ) ).
+        CATCH cx_root INTO DATA(lx_audit).
+          APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
+            severity = if_abap_behv_message=>severity-warning
+            text = |Audit log skipped: { lx_audit->get_text( ) }| ) ) TO reported-req.
+      ENDTRY.
+
+      " ── Header gốc: giữ nguyên env_id, chỉ set Status = ACTIVE ──
+      MODIFY ENTITIES OF zir_conf_req_h IN LOCAL MODE
+        ENTITY Req UPDATE FIELDS ( Status ChangedBy ChangedAt )
+        WITH VALUE #( ( %tky      = <r>-%tky
+                        Status    = gc_st_active
+                        ChangedBy = sy-uname
+                        ChangedAt = lv_now ) ).
+
     ENDLOOP.
 
-    " ── Copy MM Route: luôn INSERT mới, chỉ đổi env_id và req_id ──
-    SELECT * FROM zmmrouteconf
-      WHERE req_id = @<r>-ReqId AND env_id = @<r>-EnvId
-      INTO TABLE @DATA(lt_rt).
-    LOOP AT lt_rt ASSIGNING FIELD-SYMBOL(<rt>).
-      INSERT zmmrouteconf FROM @( VALUE zmmrouteconf(
-        client       = sy-mandt
-        item_id      = cl_system_uuid=>create_uuid_x16_static( )
-        req_id       = <r>-ReqId
-        env_id       = lv_next_env
-        plant_id     = <rt>-plant_id
-        send_wh      = <rt>-send_wh
-        receive_wh   = <rt>-receive_wh
-        inspector_id = <rt>-inspector_id
-        trans_mode   = <rt>-trans_mode
-        is_allowed   = <rt>-is_allowed
-        version_no   = 1
-        created_by   = sy-uname  created_at = lv_now
-        changed_by   = sy-uname  changed_at = lv_now ) ).
-    ENDLOOP.
-
-    " ── Copy FI Limit: luôn INSERT mới, chỉ đổi env_id và req_id ──
-    SELECT * FROM zfilimitconf
-      WHERE req_id = @<r>-ReqId AND env_id = @<r>-EnvId
-      INTO TABLE @DATA(lt_fi).
-    LOOP AT lt_fi ASSIGNING FIELD-SYMBOL(<fi>).
-      INSERT zfilimitconf FROM @( VALUE zfilimitconf(
-        client        = sy-mandt
-        item_id       = cl_system_uuid=>create_uuid_x16_static( )
-        req_id        = <r>-ReqId
-        env_id        = lv_next_env
-        expense_type  = <fi>-expense_type
-        gl_account    = <fi>-gl_account
-        auto_appr_lim = <fi>-auto_appr_lim
-        currency      = <fi>-currency
-        version_no    = 1
-        created_by    = sy-uname  created_at = lv_now
-        changed_by    = sy-uname  changed_at = lv_now ) ).
-    ENDLOOP.
-
-    " ── Copy SD Price: luôn INSERT mới, chỉ đổi env_id và req_id ──
-    SELECT * FROM zsd_price_conf
-      WHERE req_id = @<r>-ReqId AND env_id = @<r>-EnvId
-      INTO TABLE @DATA(lt_sd).
-    LOOP AT lt_sd ASSIGNING FIELD-SYMBOL(<sd>).
-      INSERT zsd_price_conf FROM @( VALUE zsd_price_conf(
-        client        = sy-mandt
-        item_id       = cl_system_uuid=>create_uuid_x16_static( )
-        req_id        = <r>-ReqId
-        env_id        = lv_next_env
-        branch_id     = <sd>-branch_id
-        cust_group    = <sd>-cust_group
-        material_grp  = <sd>-material_grp
-        max_discount  = <sd>-max_discount
-        min_order_val = <sd>-min_order_val
-        currency      = <sd>-currency
-        valid_from    = <sd>-valid_from
-        valid_to      = <sd>-valid_to
-        version_no    = 1
-        created_by    = sy-uname  created_at = lv_now
-        changed_by    = sy-uname  changed_at = lv_now ) ).
-    ENDLOOP.
-
-    " ── Audit log ──
-    TRY.
-        DATA(ls_new_hdr) = VALUE zconfreqh(
-          req_id      = <r>-ReqId
-          env_id      = lv_next_env
-          status      = gc_st_active
-          module_id   = <r>-ModuleId
-          req_title   = <r>-ReqTitle ).
-
-        zcl_gsp26_rule_writer=>log_audit_entry(
-          iv_conf_id  = <r>-ConfId
-          iv_req_id   = <r>-ReqId
-          iv_mod_id   = <r>-ModuleId
-          iv_act_type = 'PROMOTE'
-          iv_tab_name = 'ZCONFREQH'
-          iv_env_id   = lv_next_env
-          is_new_data = VALUE #( BASE <r> Status = gc_st_active
-                                 EnvId  = lv_next_env ) ).
-      CATCH cx_root INTO DATA(lx_audit).
-        APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-          severity = if_abap_behv_message=>severity-warning
-          text = |Audit log skipped: { lx_audit->get_text( ) }| ) ) TO reported-req.
-    ENDTRY.
-
-    " ── Header gốc: giữ nguyên env_id, chỉ set Status = ACTIVE ──
-    MODIFY ENTITIES OF zir_conf_req_h IN LOCAL MODE
-      ENTITY Req UPDATE FIELDS ( Status ChangedBy ChangedAt )
-      WITH VALUE #( ( %tky      = <r>-%tky
-                      Status    = gc_st_active
-                      ChangedBy = sy-uname
-                      ChangedAt = lv_now ) ).
-
-  ENDLOOP.
-
-  result = VALUE #( FOR r IN reqs ( %tky = r-%tky ) ).
-ENDMETHOD.
+    result = VALUE #( FOR r IN reqs ( %tky = r-%tky ) ).
+  ENDMETHOD.
 
 
   METHOD rollback.
@@ -856,233 +968,233 @@ ENDMETHOD.
   ENDMETHOD.
 
 
- METHOD apply.
-      DATA lv_now TYPE timestampl.
-      GET TIME STAMP FIELD lv_now.
+  METHOD apply.
+    DATA lv_now TYPE timestampl.
+    GET TIME STAMP FIELD lv_now.
 
-      READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
-        ENTITY Req ALL FIELDS WITH CORRESPONDING #( keys )
-        RESULT DATA(reqs).
+    READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
+      ENTITY Req ALL FIELDS WITH CORRESPONDING #( keys )
+      RESULT DATA(reqs).
 
-      LOOP AT reqs ASSIGNING FIELD-SYMBOL(<r>).
+    LOOP AT reqs ASSIGNING FIELD-SYMBOL(<r>).
 
-        IF <r>-Status <> gc_st_approved.
-          APPEND VALUE #( %tky = <r>-%tky ) TO failed-req.
+      IF <r>-Status <> gc_st_approved.
+        APPEND VALUE #( %tky = <r>-%tky ) TO failed-req.
+        APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
+          severity = if_abap_behv_message=>severity-error
+          text = 'Apply chỉ được thực hiện khi status là Approved' ) ) TO
+reported-req.
+        CONTINUE.
+      ENDIF.
+
+      " ── MM Route: zmmrouteconf_req → zmmrouteconf ──
+      SELECT * FROM zmmrouteconf_req
+        WHERE req_id = @<r>-ReqId INTO TABLE @DATA(lt_route_req).
+      IF lt_route_req IS NOT INITIAL.
+        LOOP AT lt_route_req ASSIGNING FIELD-SYMBOL(<rt>).
+          CASE <rt>-action_type.
+            WHEN 'U'.
+              SELECT SINGLE @abap_true FROM zmmrouteconf
+                WHERE item_id = @<rt>-source_item_id INTO
+@DATA(lv_rt_exists).
+              IF lv_rt_exists = abap_true.
+                UPDATE zmmrouteconf SET
+                  env_id = @<rt>-env_id, plant_id = @<rt>-plant_id,
+                  send_wh = @<rt>-send_wh, receive_wh = @<rt>-receive_wh,
+                  inspector_id = @<rt>-inspector_id, trans_mode =
+@<rt>-trans_mode,
+                  is_allowed = @<rt>-is_allowed, version_no =
+@<rt>-version_no,
+                  req_id = @<r>-ReqId, changed_by = @sy-uname, changed_at
+= @lv_now
+                WHERE item_id = @<rt>-source_item_id.
+              ENDIF.
+              CLEAR lv_rt_exists.
+            WHEN 'C'.
+              INSERT zmmrouteconf FROM @( VALUE zmmrouteconf(
+                client = sy-mandt  item_id = <rt>-item_id  req_id =
+<r>-ReqId
+                env_id = <rt>-env_id  plant_id = <rt>-plant_id
+                send_wh = <rt>-send_wh  receive_wh = <rt>-receive_wh
+                inspector_id = <rt>-inspector_id  trans_mode =
+<rt>-trans_mode
+                is_allowed = <rt>-is_allowed  version_no = 1
+                created_by = sy-uname  created_at = lv_now
+                changed_by = sy-uname  changed_at = lv_now ) ).
+            WHEN 'X'.
+              DELETE FROM zmmrouteconf WHERE item_id =
+@<rt>-source_item_id.
+          ENDCASE.
+        ENDLOOP.
+        UPDATE zmmrouteconf_req SET
+          line_status = @gc_st_active, changed_by = @sy-uname, changed_at
+= @lv_now
+        WHERE req_id = @<r>-ReqId.
+      ENDIF.
+
+      " ── MM Safe Stock: zmmsafestock_req → zmmsafestock ──
+      SELECT * FROM zmmsafestock_req
+        WHERE req_id = @<r>-ReqId INTO TABLE @DATA(lt_ss_req).
+      IF lt_ss_req IS NOT INITIAL.
+        LOOP AT lt_ss_req ASSIGNING FIELD-SYMBOL(<ss>).
+          CASE <ss>-action_type.
+            WHEN 'U'.
+              SELECT SINGLE @abap_true FROM zmmsafestock
+                WHERE item_id = @<ss>-source_item_id INTO
+@DATA(lv_ss_exists).
+              IF lv_ss_exists = abap_true.
+                UPDATE zmmsafestock SET
+                  env_id = @<ss>-env_id, plant_id = @<ss>-plant_id,
+                  mat_group = @<ss>-mat_group, min_qty = @<ss>-min_qty,
+                  version_no = @<ss>-version_no, req_id = @<r>-ReqId,
+                  changed_by = @sy-uname, changed_at = @lv_now
+                WHERE item_id = @<ss>-source_item_id.
+              ENDIF.
+              CLEAR lv_ss_exists.
+            WHEN 'C'.
+              INSERT zmmsafestock FROM @( VALUE zmmsafestock(
+                client = sy-mandt  item_id = <ss>-item_id  req_id =
+<r>-ReqId
+                env_id = <ss>-env_id  plant_id = <ss>-plant_id
+                mat_group = <ss>-mat_group  min_qty = <ss>-min_qty
+                version_no = 1  created_by = sy-uname  created_at = lv_now
+                changed_by = sy-uname  changed_at = lv_now ) ).
+            WHEN 'X'.
+              DELETE FROM zmmsafestock WHERE item_id =
+@<ss>-source_item_id.
+          ENDCASE.
+        ENDLOOP.
+        UPDATE zmmsafestock_req SET
+          line_status = @gc_st_active, changed_by = @sy-uname, changed_at
+= @lv_now
+        WHERE req_id = @<r>-ReqId.
+      ENDIF.
+
+      " ── SD Price: zsd_price_req → zsd_price_conf ──
+      SELECT * FROM zsd_price_req
+        WHERE req_id = @<r>-ReqId INTO TABLE @DATA(lt_price_req).
+      IF lt_price_req IS NOT INITIAL.
+        LOOP AT lt_price_req ASSIGNING FIELD-SYMBOL(<pr>).
+          CASE <pr>-action_type.
+            WHEN 'U'.
+              SELECT SINGLE @abap_true FROM zsd_price_conf
+                WHERE item_id = @<pr>-source_item_id INTO
+@DATA(lv_pr_exists).
+              IF lv_pr_exists = abap_true.
+                UPDATE zsd_price_conf SET
+                  env_id = @<pr>-env_id, branch_id = @<pr>-branch_id,
+                  cust_group = @<pr>-cust_group, material_grp =
+@<pr>-material_grp,
+                  max_discount = @<pr>-max_discount, min_order_val =
+@<pr>-min_order_val,
+                  approver_grp = @<pr>-approver_grp, currency =
+@<pr>-currency,
+                  valid_from = @<pr>-valid_from, valid_to =
+@<pr>-valid_to,
+                  version_no = @<pr>-version_no, req_id = @<r>-ReqId,
+                  changed_by = @sy-uname, changed_at = @lv_now
+                WHERE item_id = @<pr>-source_item_id.
+              ENDIF.
+              CLEAR lv_pr_exists.
+            WHEN 'C'.
+              INSERT zsd_price_conf FROM @( VALUE zsd_price_conf(
+                client = sy-mandt  item_id = <pr>-item_id  req_id =
+<r>-ReqId
+                env_id = <pr>-env_id  branch_id = <pr>-branch_id
+                cust_group = <pr>-cust_group  material_grp =
+<pr>-material_grp
+                max_discount = <pr>-max_discount  min_order_val =
+<pr>-min_order_val
+                approver_grp = <pr>-approver_grp  currency = <pr>-currency
+                valid_from = <pr>-valid_from  valid_to = <pr>-valid_to
+                version_no = 1  created_by = sy-uname  created_at = lv_now
+                changed_by = sy-uname  changed_at = lv_now ) ).
+            WHEN 'X'.
+              DELETE FROM zsd_price_conf WHERE item_id =
+@<pr>-source_item_id.
+          ENDCASE.
+        ENDLOOP.
+        UPDATE zsd_price_req SET
+          line_status = @gc_st_active, changed_by = @sy-uname, changed_at
+= @lv_now
+        WHERE req_id = @<r>-ReqId.
+      ENDIF.
+
+      " ── FI Limit: zfilimitreq → zfilimitconf ──
+      SELECT * FROM zfilimitreq
+        WHERE req_id = @<r>-ReqId INTO TABLE @DATA(lt_limit_req).
+      IF lt_limit_req IS NOT INITIAL.
+        LOOP AT lt_limit_req ASSIGNING FIELD-SYMBOL(<fl>).
+          CASE <fl>-action_type.
+            WHEN 'U'.
+              SELECT SINGLE @abap_true FROM zfilimitconf
+                WHERE item_id = @<fl>-source_item_id INTO
+@DATA(lv_fl_exists).
+              IF lv_fl_exists = abap_true.
+                UPDATE zfilimitconf SET
+                  env_id = @<fl>-env_id, expense_type =
+@<fl>-expense_type,
+                  gl_account = @<fl>-gl_account, auto_appr_lim =
+@<fl>-auto_appr_lim,
+                  currency = @<fl>-currency, version_no =
+@<fl>-version_no,
+                  req_id = @<r>-ReqId, changed_by = @sy-uname, changed_at
+= @lv_now
+                WHERE item_id = @<fl>-source_item_id.
+              ENDIF.
+              CLEAR lv_fl_exists.
+            WHEN 'C'.
+              INSERT zfilimitconf FROM @( VALUE zfilimitconf(
+                client = sy-mandt  item_id = <fl>-item_id  req_id =
+<r>-ReqId
+                env_id = <fl>-env_id  expense_type = <fl>-expense_type
+                gl_account = <fl>-gl_account  auto_appr_lim =
+<fl>-auto_appr_lim
+                currency = <fl>-currency  version_no = 1
+                created_by = sy-uname  created_at = lv_now
+                changed_by = sy-uname  changed_at = lv_now ) ).
+            WHEN 'X'.
+              DELETE FROM zfilimitconf WHERE item_id =
+@<fl>-source_item_id.
+          ENDCASE.
+        ENDLOOP.
+        UPDATE zfilimitreq SET
+          line_status = @gc_st_active, changed_by = @sy-uname, changed_at
+= @lv_now
+        WHERE req_id = @<r>-ReqId.
+      ENDIF.
+
+      " ── Audit Log ──
+      TRY.
+          zcl_gsp26_rule_writer=>log_audit_entry(
+            iv_conf_id  = <r>-ConfId  iv_req_id = <r>-ReqId
+            iv_mod_id   = <r>-ModuleId  iv_act_type = 'APPLY'
+            iv_tab_name = 'ZCONFREQH'  iv_env_id = <r>-EnvId
+            is_new_data = VALUE #( BASE <r> Status = gc_st_active ) ).
+        CATCH cx_root INTO DATA(lx_audit_apply).
           APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-            severity = if_abap_behv_message=>severity-error
-            text = 'Apply chỉ được thực hiện khi status là Approved' ) ) TO
-  reported-req.
-          CONTINUE.
-        ENDIF.
+            severity = if_abap_behv_message=>severity-warning
+            text = |Audit log failed: { lx_audit_apply->get_text( ) }| ) )
+ TO reported-req.
+      ENDTRY.
 
-        " ── MM Route: zmmrouteconf_req → zmmrouteconf ──
-        SELECT * FROM zmmrouteconf_req
-          WHERE req_id = @<r>-ReqId INTO TABLE @DATA(lt_route_req).
-        IF lt_route_req IS NOT INITIAL.
-          LOOP AT lt_route_req ASSIGNING FIELD-SYMBOL(<rt>).
-            CASE <rt>-action_type.
-              WHEN 'U'.
-                SELECT SINGLE @abap_true FROM zmmrouteconf
-                  WHERE item_id = @<rt>-source_item_id INTO
-  @DATA(lv_rt_exists).
-                IF lv_rt_exists = abap_true.
-                  UPDATE zmmrouteconf SET
-                    env_id = @<rt>-env_id, plant_id = @<rt>-plant_id,
-                    send_wh = @<rt>-send_wh, receive_wh = @<rt>-receive_wh,
-                    inspector_id = @<rt>-inspector_id, trans_mode =
-  @<rt>-trans_mode,
-                    is_allowed = @<rt>-is_allowed, version_no =
-  @<rt>-version_no,
-                    req_id = @<r>-ReqId, changed_by = @sy-uname, changed_at
-  = @lv_now
-                  WHERE item_id = @<rt>-source_item_id.
-                ENDIF.
-                CLEAR lv_rt_exists.
-              WHEN 'C'.
-                INSERT zmmrouteconf FROM @( VALUE zmmrouteconf(
-                  client = sy-mandt  item_id = <rt>-item_id  req_id =
-  <r>-ReqId
-                  env_id = <rt>-env_id  plant_id = <rt>-plant_id
-                  send_wh = <rt>-send_wh  receive_wh = <rt>-receive_wh
-                  inspector_id = <rt>-inspector_id  trans_mode =
-  <rt>-trans_mode
-                  is_allowed = <rt>-is_allowed  version_no = 1
-                  created_by = sy-uname  created_at = lv_now
-                  changed_by = sy-uname  changed_at = lv_now ) ).
-              WHEN 'X'.
-                DELETE FROM zmmrouteconf WHERE item_id =
-  @<rt>-source_item_id.
-            ENDCASE.
-          ENDLOOP.
-          UPDATE zmmrouteconf_req SET
-            line_status = @gc_st_active, changed_by = @sy-uname, changed_at
-  = @lv_now
-          WHERE req_id = @<r>-ReqId.
-        ENDIF.
+      " ── Cập nhật status → ACTIVE ──
+      MODIFY ENTITIES OF zir_conf_req_h IN LOCAL MODE
+        ENTITY Req UPDATE FIELDS ( Status ChangedBy ChangedAt )
+        WITH VALUE #( ( %tky = <r>-%tky
+          Status = gc_st_active  ChangedBy = sy-uname  ChangedAt = lv_now
+) ).
+    ENDLOOP.
 
-        " ── MM Safe Stock: zmmsafestock_req → zmmsafestock ──
-        SELECT * FROM zmmsafestock_req
-          WHERE req_id = @<r>-ReqId INTO TABLE @DATA(lt_ss_req).
-        IF lt_ss_req IS NOT INITIAL.
-          LOOP AT lt_ss_req ASSIGNING FIELD-SYMBOL(<ss>).
-            CASE <ss>-action_type.
-              WHEN 'U'.
-                SELECT SINGLE @abap_true FROM zmmsafestock
-                  WHERE item_id = @<ss>-source_item_id INTO
-  @DATA(lv_ss_exists).
-                IF lv_ss_exists = abap_true.
-                  UPDATE zmmsafestock SET
-                    env_id = @<ss>-env_id, plant_id = @<ss>-plant_id,
-                    mat_group = @<ss>-mat_group, min_qty = @<ss>-min_qty,
-                    version_no = @<ss>-version_no, req_id = @<r>-ReqId,
-                    changed_by = @sy-uname, changed_at = @lv_now
-                  WHERE item_id = @<ss>-source_item_id.
-                ENDIF.
-                CLEAR lv_ss_exists.
-              WHEN 'C'.
-                INSERT zmmsafestock FROM @( VALUE zmmsafestock(
-                  client = sy-mandt  item_id = <ss>-item_id  req_id =
-  <r>-ReqId
-                  env_id = <ss>-env_id  plant_id = <ss>-plant_id
-                  mat_group = <ss>-mat_group  min_qty = <ss>-min_qty
-                  version_no = 1  created_by = sy-uname  created_at = lv_now
-                  changed_by = sy-uname  changed_at = lv_now ) ).
-              WHEN 'X'.
-                DELETE FROM zmmsafestock WHERE item_id =
-  @<ss>-source_item_id.
-            ENDCASE.
-          ENDLOOP.
-          UPDATE zmmsafestock_req SET
-            line_status = @gc_st_active, changed_by = @sy-uname, changed_at
-  = @lv_now
-          WHERE req_id = @<r>-ReqId.
-        ENDIF.
-
-        " ── SD Price: zsd_price_req → zsd_price_conf ──
-        SELECT * FROM zsd_price_req
-          WHERE req_id = @<r>-ReqId INTO TABLE @DATA(lt_price_req).
-        IF lt_price_req IS NOT INITIAL.
-          LOOP AT lt_price_req ASSIGNING FIELD-SYMBOL(<pr>).
-            CASE <pr>-action_type.
-              WHEN 'U'.
-                SELECT SINGLE @abap_true FROM zsd_price_conf
-                  WHERE item_id = @<pr>-source_item_id INTO
-  @DATA(lv_pr_exists).
-                IF lv_pr_exists = abap_true.
-                  UPDATE zsd_price_conf SET
-                    env_id = @<pr>-env_id, branch_id = @<pr>-branch_id,
-                    cust_group = @<pr>-cust_group, material_grp =
-  @<pr>-material_grp,
-                    max_discount = @<pr>-max_discount, min_order_val =
-  @<pr>-min_order_val,
-                    approver_grp = @<pr>-approver_grp, currency =
-  @<pr>-currency,
-                    valid_from = @<pr>-valid_from, valid_to =
-  @<pr>-valid_to,
-                    version_no = @<pr>-version_no, req_id = @<r>-ReqId,
-                    changed_by = @sy-uname, changed_at = @lv_now
-                  WHERE item_id = @<pr>-source_item_id.
-                ENDIF.
-                CLEAR lv_pr_exists.
-              WHEN 'C'.
-                INSERT zsd_price_conf FROM @( VALUE zsd_price_conf(
-                  client = sy-mandt  item_id = <pr>-item_id  req_id =
-  <r>-ReqId
-                  env_id = <pr>-env_id  branch_id = <pr>-branch_id
-                  cust_group = <pr>-cust_group  material_grp =
-  <pr>-material_grp
-                  max_discount = <pr>-max_discount  min_order_val =
-  <pr>-min_order_val
-                  approver_grp = <pr>-approver_grp  currency = <pr>-currency
-                  valid_from = <pr>-valid_from  valid_to = <pr>-valid_to
-                  version_no = 1  created_by = sy-uname  created_at = lv_now
-                  changed_by = sy-uname  changed_at = lv_now ) ).
-              WHEN 'X'.
-                DELETE FROM zsd_price_conf WHERE item_id =
-  @<pr>-source_item_id.
-            ENDCASE.
-          ENDLOOP.
-          UPDATE zsd_price_req SET
-            line_status = @gc_st_active, changed_by = @sy-uname, changed_at
-  = @lv_now
-          WHERE req_id = @<r>-ReqId.
-        ENDIF.
-
-        " ── FI Limit: zfilimitreq → zfilimitconf ──
-        SELECT * FROM zfilimitreq
-          WHERE req_id = @<r>-ReqId INTO TABLE @DATA(lt_limit_req).
-        IF lt_limit_req IS NOT INITIAL.
-          LOOP AT lt_limit_req ASSIGNING FIELD-SYMBOL(<fl>).
-            CASE <fl>-action_type.
-              WHEN 'U'.
-                SELECT SINGLE @abap_true FROM zfilimitconf
-                  WHERE item_id = @<fl>-source_item_id INTO
-  @DATA(lv_fl_exists).
-                IF lv_fl_exists = abap_true.
-                  UPDATE zfilimitconf SET
-                    env_id = @<fl>-env_id, expense_type =
-  @<fl>-expense_type,
-                    gl_account = @<fl>-gl_account, auto_appr_lim =
-  @<fl>-auto_appr_lim,
-                    currency = @<fl>-currency, version_no =
-  @<fl>-version_no,
-                    req_id = @<r>-ReqId, changed_by = @sy-uname, changed_at
-  = @lv_now
-                  WHERE item_id = @<fl>-source_item_id.
-                ENDIF.
-                CLEAR lv_fl_exists.
-              WHEN 'C'.
-                INSERT zfilimitconf FROM @( VALUE zfilimitconf(
-                  client = sy-mandt  item_id = <fl>-item_id  req_id =
-  <r>-ReqId
-                  env_id = <fl>-env_id  expense_type = <fl>-expense_type
-                  gl_account = <fl>-gl_account  auto_appr_lim =
-  <fl>-auto_appr_lim
-                  currency = <fl>-currency  version_no = 1
-                  created_by = sy-uname  created_at = lv_now
-                  changed_by = sy-uname  changed_at = lv_now ) ).
-              WHEN 'X'.
-                DELETE FROM zfilimitconf WHERE item_id =
-  @<fl>-source_item_id.
-            ENDCASE.
-          ENDLOOP.
-          UPDATE zfilimitreq SET
-            line_status = @gc_st_active, changed_by = @sy-uname, changed_at
-  = @lv_now
-          WHERE req_id = @<r>-ReqId.
-        ENDIF.
-
-        " ── Audit Log ──
-        TRY.
-            zcl_gsp26_rule_writer=>log_audit_entry(
-              iv_conf_id  = <r>-ConfId  iv_req_id = <r>-ReqId
-              iv_mod_id   = <r>-ModuleId  iv_act_type = 'APPLY'
-              iv_tab_name = 'ZCONFREQH'  iv_env_id = <r>-EnvId
-              is_new_data = VALUE #( BASE <r> Status = gc_st_active ) ).
-          CATCH cx_root INTO DATA(lx_audit_apply).
-            APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-              severity = if_abap_behv_message=>severity-warning
-              text = |Audit log failed: { lx_audit_apply->get_text( ) }| ) )
-   TO reported-req.
-        ENDTRY.
-
-        " ── Cập nhật status → ACTIVE ──
-        MODIFY ENTITIES OF zir_conf_req_h IN LOCAL MODE
-          ENTITY Req UPDATE FIELDS ( Status ChangedBy ChangedAt )
-          WITH VALUE #( ( %tky = <r>-%tky
-            Status = gc_st_active  ChangedBy = sy-uname  ChangedAt = lv_now
-  ) ).
-      ENDLOOP.
-
-      READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
-        ENTITY Req ALL FIELDS WITH CORRESPONDING #( keys ) RESULT
-  DATA(lt_final).
+    READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
+      ENTITY Req ALL FIELDS WITH CORRESPONDING #( keys ) RESULT
+DATA(lt_final).
     result = VALUE #( FOR ls_final IN lt_final ( %tky = ls_final-%tky
     %param = ls_final ) ).
-    ENDMETHOD.
+  ENDMETHOD.
 
-    METHOD createRequest.
-      " ── Khai báo tất cả biến ở đây ──
+  METHOD createRequest.
+    " ── Khai báo tất cả biến ở đây ──
     DATA lv_now              TYPE timestampl.
     DATA lv_conf_id_x16      TYPE sysuuid_x16.
     DATA lv_uuid_c36         TYPE sysuuid_c36.
@@ -1092,14 +1204,6 @@ ENDMETHOD.
     DATA lv_req_id_c36       TYPE sysuuid_c36.
     DATA lv_target_app       TYPE char30.
     DATA lv_conf_id_c36      TYPE string.
-    DATA lt_route            TYPE TABLE OF zmmrouteconf.
-    DATA lt_safe             TYPE TABLE OF zmmsafestock.
-    DATA lt_price            TYPE TABLE OF zsd_price_conf.
-    DATA lt_limit            TYPE TABLE OF zfilimitconf.
-    DATA ls_route            TYPE zmmrouteconf.
-    DATA ls_safe             TYPE zmmsafestock.
-    DATA ls_price            TYPE zsd_price_conf.
-    DATA ls_limit            TYPE zfilimitconf.
 
     IF keys IS INITIAL. RETURN. ENDIF.
 
@@ -1107,8 +1211,7 @@ ENDMETHOD.
 
       CLEAR: lv_now, lv_conf_id_x16, lv_uuid_c36, lv_env,
              lv_req_id_x16, lv_req_item_id_x16, lv_req_id_c36,
-             lv_target_app, lv_conf_id_c36,
-             lt_route, lt_safe, lt_price, lt_limit.
+             lv_target_app, lv_conf_id_c36.
 
       GET TIME STAMP FIELD lv_now.
 
@@ -1194,120 +1297,6 @@ ENDMETHOD.
       lv_req_id_x16      = ls_mapped-req[ 1 ]-%key-ReqId.
       lv_req_item_id_x16 = ls_mapped-item[ 1 ]-%key-ReqItemId.
 
-      " ── Snapshot theo TargetCds ──
-      " NOTE: ZI_MM_ROUTE_CONF dùng delta model — frontend chỉ ghi các dòng
-      " thực sự thay đổi vào zmmrouteconf_req, không snapshot toàn bộ.
-      CASE ls_key-%param-TargetCds.
-
-        WHEN 'ZI_MM_SAFE_STOCK'.
-          SELECT * FROM zmmsafestock
-            WHERE env_id = @lv_env
-            INTO TABLE @lt_safe.
-
-          LOOP AT lt_safe INTO ls_safe.
-            INSERT zmmsafestock_req FROM @( VALUE zmmsafestock_req(
-              client         = sy-mandt
-              req_id         = lv_req_id_x16
-              req_item_id    = lv_req_item_id_x16
-              item_id        = cl_system_uuid=>create_uuid_x16_static( )
-              source_item_id = ls_safe-item_id
-              conf_id        = lv_conf_id_x16
-              action_type    = 'U'
-              old_env_id     = ls_safe-env_id
-              old_plant_id   = ls_safe-plant_id
-              old_mat_group  = ls_safe-mat_group
-              old_min_qty    = ls_safe-min_qty
-              old_version_no = ls_safe-version_no
-              env_id         = ls_safe-env_id
-              plant_id       = ls_safe-plant_id
-              mat_group      = ls_safe-mat_group
-              min_qty        = ls_safe-min_qty
-              version_no     = ls_safe-version_no
-              line_status    = gc_st_draft
-              created_by     = sy-uname
-              created_at     = lv_now
-              changed_by     = sy-uname
-              changed_at     = lv_now
-            ) ).
-          ENDLOOP.
-
-        WHEN 'ZI_SD_PRICE_CONF'.
-          SELECT * FROM zsd_price_conf
-            WHERE env_id = @lv_env
-            INTO TABLE @lt_price.
-
-          LOOP AT lt_price INTO ls_price.
-            INSERT zsd_price_req FROM @( VALUE zsd_price_req(
-              client            = sy-mandt
-              req_id            = lv_req_id_x16
-              req_item_id       = lv_req_item_id_x16
-              item_id           = cl_system_uuid=>create_uuid_x16_static( )
-              source_item_id    = ls_price-item_id
-              conf_id           = lv_conf_id_x16
-              action_type       = 'U'
-              old_env_id        = ls_price-env_id
-              old_branch_id     = ls_price-branch_id
-              old_cust_group    = ls_price-cust_group
-              old_material_grp  = ls_price-material_grp
-              old_max_discount  = ls_price-max_discount
-              old_min_order_val = ls_price-min_order_val
-              old_currency      = ls_price-currency
-              old_valid_from    = ls_price-valid_from
-              old_valid_to      = ls_price-valid_to
-              old_version_no    = ls_price-version_no
-              env_id            = ls_price-env_id
-              branch_id         = ls_price-branch_id
-              cust_group        = ls_price-cust_group
-              material_grp      = ls_price-material_grp
-              max_discount      = ls_price-max_discount
-              min_order_val     = ls_price-min_order_val
-              currency          = ls_price-currency
-              valid_from        = ls_price-valid_from
-              valid_to          = ls_price-valid_to
-              version_no        = ls_price-version_no
-              line_status       = gc_st_draft
-              created_by        = sy-uname
-              created_at        = lv_now
-              changed_by        = sy-uname
-              changed_at        = lv_now
-            ) ).
-          ENDLOOP.
-
-        WHEN 'ZI_FI_LIMIT_CONF'.
-          SELECT * FROM zfilimitconf
-            WHERE env_id = @lv_env
-            INTO TABLE @lt_limit.
-
-          LOOP AT lt_limit INTO ls_limit.
-            INSERT zfilimitreq FROM @( VALUE zfilimitreq(
-              client            = sy-mandt
-              req_id            = lv_req_id_x16
-              req_item_id       = lv_req_item_id_x16
-              item_id           = cl_system_uuid=>create_uuid_x16_static( )
-              source_item_id    = ls_limit-item_id
-              conf_id           = lv_conf_id_x16
-              action_type       = 'U'
-              old_env_id        = ls_limit-env_id
-              old_expense_type  = ls_limit-expense_type
-              old_gl_account    = ls_limit-gl_account
-              old_auto_appr_lim = ls_limit-auto_appr_lim
-              old_currency      = ls_limit-currency
-              old_version_no    = ls_limit-version_no
-              env_id            = ls_limit-env_id
-              expense_type      = ls_limit-expense_type
-              gl_account        = ls_limit-gl_account
-              auto_appr_lim     = ls_limit-auto_appr_lim
-              currency          = ls_limit-currency
-              version_no        = ls_limit-version_no
-              line_status       = gc_st_draft
-              created_by        = sy-uname
-              created_at        = lv_now
-              changed_by        = sy-uname
-              changed_at        = lv_now
-            ) ).
-          ENDLOOP.
-
-      ENDCASE.
 
       " ── Trả về result ──
       cl_system_uuid=>convert_uuid_x16_static(
@@ -1333,7 +1322,6 @@ ENDMETHOD.
 
   ENDMETHOD.
 
-
   METHOD updateReason.
     DATA lv_now TYPE timestampl.
     GET TIME STAMP FIELD lv_now.
@@ -1355,7 +1343,6 @@ ENDMETHOD.
 
     result = VALUE #( FOR r IN reqs ( %tky = r-%tky ) ).
   ENDMETHOD.
-
 
 ENDCLASS.
 

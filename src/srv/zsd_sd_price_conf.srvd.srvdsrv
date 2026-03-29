@@ -1,5 +1,9 @@
 @EndUserText.label: 'Service for SD Price Config'
 define service ZSD_SD_PRICE_CONF {
   expose ZC_SD_PRICE_CONF as SDPriceConf;
+  expose ZC_SD_PRICE_MAIN as SDPriceMain;
   expose ZC_ENV_DEF as EnvDef;
+  expose ZC_VH_BRANCH as BranchDef;
+  expose ZC_VH_CUST_GROUP as CustGroupDef;
+  expose ZC_VH_CURRENCY as CurrencyDef;
 }

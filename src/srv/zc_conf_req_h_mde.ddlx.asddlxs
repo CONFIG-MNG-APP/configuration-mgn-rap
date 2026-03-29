@@ -56,13 +56,21 @@ annotate entity ZC_CONF_REQ_H with
   StatusCriticality;
 
   @UI: {
-    lineItem:       [ { position: 10, label: 'Request Title' } ],
+    lineItem: [ 
+      { position: 10, label: 'Request Title' },
+      
+      /* Chỉ mang 2 tác vụ của Manager ra ngoài List Report */
+      { type: #FOR_ACTION, dataAction: 'approve',  label: 'Approve', position: 10 },
+      { type: #FOR_ACTION, dataAction: 'reject',   label: 'Reject', position: 20 }
+    ],
     selectionField: [ { position: 10 } ],
     identification: [
       { position: 10, label: 'Request Title' },
       { type: #FOR_ACTION, dataAction: 'approve',  label: 'Approve'  },
       { type: #FOR_ACTION, dataAction: 'reject',   label: 'Reject'   },
-      { type: #FOR_ACTION, dataAction: 'rollback', label: 'Rollback' }
+      
+      /* Vẫn giữ Rollback ở màn hình chi tiết (Object Page) cho IT Admin */
+      { type: #FOR_ACTION, dataAction: 'rollback', label: 'Rollback' } 
     ],
     fieldGroup: [ { qualifier: 'REQ', position: 10, label: 'Request Title' } ]
   }
