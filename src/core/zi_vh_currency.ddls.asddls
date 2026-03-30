@@ -7,6 +7,12 @@
     sizeCategory: #S,
     dataClass: #MIXED
 }
-define view entity ZI_VH_CURRENCY as
-  select distinct from zsd_price_conf { key currency as Currency }
-  where currency <> ''
+define view entity ZI_VH_CURRENCY
+  as select from I_Currency as c
+  left outer join I_CurrencyText as t
+    on  t.Currency = c.Currency
+    and t.Language = 'E'
+{
+  key c.Currency,
+      t.CurrencyName
+}

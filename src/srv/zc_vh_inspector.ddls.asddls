@@ -10,5 +10,6 @@
 define view entity ZC_VH_INSPECTOR as select from ZI_VH_INSPECTOR
 {
   key UserId,
-      Fullname
+      Fullname,
+      RoleLevel
 }

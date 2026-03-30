@@ -6,4 +6,6 @@ define service ZSD_SD_PRICE_CONF {
   expose ZC_VH_BRANCH as BranchDef;
   expose ZC_VH_CUST_GROUP as CustGroupDef;
   expose ZC_VH_CURRENCY as CurrencyDef;
+  expose ZC_VH_MATL_GRP as MatlGrpDef;
+  expose ZC_VH_INSPECTOR as InspectorDef;
 }

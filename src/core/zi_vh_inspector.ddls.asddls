@@ -9,6 +9,9 @@
 }
 define view entity ZI_VH_INSPECTOR as select from zuserrole
 {
-  key user_id  as UserId,
-      fullname as Fullname
+  key user_id    as UserId,
+      fullname   as Fullname,
+      role_level as RoleLevel
 }
+where ( role_level = 'MANAGER' or role_level = 'IT ADMIN' )
+  and is_active = 'X'

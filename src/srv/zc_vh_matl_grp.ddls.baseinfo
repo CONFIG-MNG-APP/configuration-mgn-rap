@@ -3,8 +3,7 @@
 {
 "FROM":
 [
-"I_CURRENCY",
-"I_CURRENCYTEXT"
+"ZI_VH_MATL_GRP"
 ],
 "ASSOCIATED":
 [],
