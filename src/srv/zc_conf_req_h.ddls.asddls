@@ -15,6 +15,7 @@ define root view entity ZC_CONF_REQ_H
       Status,
       StatusCriticality,
       Reason,
+      RejectReason,
 
       CreatedBy,
       CreatedAt,
