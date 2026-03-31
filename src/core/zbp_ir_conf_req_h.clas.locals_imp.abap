@@ -364,7 +364,8 @@ CLASS lhc_Req IMPLEMENTATION.
         UPDATE zmmrouteconf_req SET line_status = @gc_st_approved, changed_by = @sy-uname, changed_at = @lv_now WHERE req_id = @<r>-ReqId.
       ENDIF.
 
-      " WRITE-BACK VÀ GHI LOG CHI TIẾT ITEM: zfilimitreq
+      " ── WRITE-BACK VÀ GHI LOG CHI TIẾT ITEM: zfilimitreq ──
+      " -------------------------------------------------------------
       SELECT * FROM zfilimitreq WHERE req_id = @<r>-ReqId INTO TABLE @DATA(lt_fi_req).
       IF lt_fi_req IS NOT INITIAL.
         LOOP AT lt_fi_req ASSIGNING FIELD-SYMBOL(<fi>).
@@ -423,7 +424,10 @@ CLASS lhc_Req IMPLEMENTATION.
         UPDATE zfilimitreq SET line_status = @gc_st_approved, changed_by = @sy-uname, changed_at = @lv_now WHERE req_id = @<r>-ReqId.
       ENDIF.
 
-      " WRITE-BACK VÀ GHI LOG CHI TIẾT ITEM: zsd_price_req ──
+
+      " -------------------------------------------------------------
+      " ── WRITE-BACK VÀ GHI LOG CHI TIẾT ITEM: zsd_price_req ──
+      " -------------------------------------------------------------
       SELECT * FROM zsd_price_req WHERE req_id = @<r>-ReqId INTO TABLE @DATA(lt_sd_req).
       IF lt_sd_req IS NOT INITIAL.
         LOOP AT lt_sd_req ASSIGNING FIELD-SYMBOL(<sd>).
@@ -630,6 +634,51 @@ CLASS lhc_Req IMPLEMENTATION.
                         RejectReason = lv_reason
                         RejectedBy   = sy-uname
                         RejectedAt   = lv_now ) ).
+
+      " =============================================================
+      " 🚀 PUSH NOTIFICATION: THÔNG BÁO TỪ CHỐI CHO NGƯỜI TẠO REQUEST
+      " =============================================================
+      DATA: lt_notif_rej TYPE /iwngw/if_notif_provider=>ty_t_notification,
+            ls_notif_rej TYPE /iwngw/if_notif_provider=>ty_s_notification,
+            lt_recip_rej TYPE /iwngw/if_notif_provider=>ty_t_notification_recipient,
+            ls_recip_rej TYPE /iwngw/if_notif_provider=>ty_s_notification_recipient.
+
+      ls_recip_rej-id = <r>-CreatedBy.
+      APPEND ls_recip_rej TO lt_recip_rej.
+
+      TRY.
+          ls_notif_rej-id = cl_system_uuid=>create_uuid_x16_static( ).
+        CATCH cx_uuid_error.
+      ENDTRY.
+
+      ls_notif_rej-type_key     = 'REQ_REJECTED'.
+      ls_notif_rej-type_version = '1'.
+      ls_notif_rej-priority     = /iwngw/if_notif_provider=>gcs_priorities-high.
+      ls_notif_rej-recipients   = lt_recip_rej.
+      ls_notif_rej-parameters   = VALUE #(
+        ( language   = sy-langu
+          parameters = VALUE #(
+            ( name = 'ReqTitle' value = CONV #( <r>-ReqTitle ) type = 'Edm.String' )
+          )
+        )
+      ).
+      ls_notif_rej-navigation_parameters = VALUE #(
+        ( name = 'SemanticObject' value = 'ConfigReq' )
+        ( name = 'Action'         value = 'manage' )
+        ( name = 'ReqId'          value = CONV #( <r>-ReqId ) )
+      ).
+      APPEND ls_notif_rej TO lt_notif_rej.
+
+      TRY.
+          /iwngw/cl_notification_api=>create_notifications(
+            EXPORTING
+              iv_provider_id  = 'ZGSP26SAP06_REQ_NOTIF'
+              it_notification = lt_notif_rej
+          ).
+        CATCH /iwngw/cx_notification_api.
+      ENDTRY.
+      " =============================================================
+
     ENDLOOP.
 
     " 8. Đọc lại dữ liệu cuối cùng để trả về %param
@@ -780,7 +829,7 @@ CLASS lhc_Req IMPLEMENTATION.
           plant_id   = <ss>-plant_id
           mat_group  = <ss>-mat_group
           min_qty    = <ss>-min_qty
-          version_no = 1
+          version_no = COND #( WHEN lv_next_env = 'PRD' THEN <ss>-version_no + 1 ELSE <ss>-version_no )
           created_by = sy-uname  created_at = lv_now
           changed_by = sy-uname  changed_at = lv_now ) ).
       ENDLOOP.
@@ -801,7 +850,7 @@ CLASS lhc_Req IMPLEMENTATION.
           inspector_id = <rt>-inspector_id
           trans_mode   = <rt>-trans_mode
           is_allowed   = <rt>-is_allowed
-          version_no   = 1
+          version_no = COND #( WHEN lv_next_env = 'PRD' THEN <rt>-version_no + 1 ELSE <rt>-version_no )
           created_by   = sy-uname  created_at = lv_now
           changed_by   = sy-uname  changed_at = lv_now ) ).
       ENDLOOP.
@@ -820,7 +869,7 @@ CLASS lhc_Req IMPLEMENTATION.
           gl_account    = <fi>-gl_account
           auto_appr_lim = <fi>-auto_appr_lim
           currency      = <fi>-currency
-          version_no    = 1
+          version_no = COND #( WHEN lv_next_env = 'PRD' THEN <fi>-version_no + 1 ELSE <fi>-version_no )
           created_by    = sy-uname  created_at = lv_now
           changed_by    = sy-uname  changed_at = lv_now ) ).
       ENDLOOP.
@@ -843,7 +892,7 @@ CLASS lhc_Req IMPLEMENTATION.
           currency      = <sd>-currency
           valid_from    = <sd>-valid_from
           valid_to      = <sd>-valid_to
-          version_no    = 1
+          version_no    = COND #( WHEN lv_next_env = 'PRD' THEN <sd>-version_no + 1 ELSE <sd>-version_no )
           created_by    = sy-uname  created_at = lv_now
           changed_by    = sy-uname  changed_at = lv_now ) ).
       ENDLOOP.

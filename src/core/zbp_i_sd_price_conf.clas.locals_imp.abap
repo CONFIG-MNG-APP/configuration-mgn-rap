@@ -49,6 +49,26 @@ CLASS lhc_priceconf IMPLEMENTATION.
                                WHEN <r>-ActionType IS INITIAL THEN 'C'
                                ELSE <r>-ActionType ).
 
+      " ── Lookup ConfId từ request header nếu chưa có ──────────────────
+      " RAP draft activation không copy field readonly:update → ConfId luôn zero
+      " Fix: server tự lấy conf_id từ ZCONFREQH theo ReqId
+      IF <r>-ConfId IS INITIAL AND <r>-ReqId IS NOT INITIAL.
+        SELECT SINGLE conf_id
+          FROM zconfreqh
+          WHERE req_id = @<r>-ReqId
+          INTO @DATA(lv_conf_id).
+
+        IF sy-subrc = 0 AND lv_conf_id IS NOT INITIAL.
+          MODIFY ENTITIES OF zi_sd_price_conf IN LOCAL MODE
+            ENTITY PriceConf
+            UPDATE FIELDS ( ConfId )
+            WITH VALUE #( (
+              %tky   = <r>-%tky
+              ConfId = lv_conf_id
+            ) ).
+        ENDIF.
+      ENDIF.
+
       " NOTE: ActionType bị xóa khỏi UPDATE FIELDS để tránh vòng lặp vô hạn.
       " Trigger của determination là { field SourceItemId, ActionType } — nếu
       " MODIFY này ghi lại ActionType thì sẽ tự trigger lại chính nó → RAISE_SHORTDUMP.

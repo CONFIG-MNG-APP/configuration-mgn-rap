@@ -4,6 +4,7 @@ use draft;
 
 define behavior for ZC_MM_SAFE_STOCK alias SafeStock
 {
+  use create;
   use update;
 
   use action Edit;
