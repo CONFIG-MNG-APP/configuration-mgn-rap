@@ -72,25 +72,17 @@ CLASS lhc_LimitConf IMPLEMENTATION.
 
         MODIFY ENTITIES OF zi_fi_limit_conf IN LOCAL MODE
           ENTITY LimitConf
-          UPDATE FIELDS ( OldEnvId OldExpenseType OldGlAccount
-                          OldAutoApprLim OldCurrency OldVersionNo
-                          EnvId ExpenseType GlAccount
-                          AutoApprLim Currency VersionNo )
-          WITH VALUE #( (
-            %tky           = <r2>-%tky
-            OldEnvId       = ls_src-env_id
-            OldExpenseType = ls_src-expense_type
-            OldGlAccount   = ls_src-gl_account
-            OldAutoApprLim = ls_src-auto_appr_lim
-            OldCurrency    = ls_src-currency
-            OldVersionNo   = ls_src-version_no
-            EnvId          = ls_src-env_id
-            ExpenseType    = ls_src-expense_type
-            GlAccount      = ls_src-gl_account
-            AutoApprLim    = ls_src-auto_appr_lim
-            Currency       = ls_src-currency
-            VersionNo      = ls_src-version_no
-          ) ).
+             UPDATE FIELDS ( OldEnvId OldExpenseType OldGlAccount
+                            OldAutoApprLim OldCurrency OldVersionNo )
+            WITH VALUE #( (
+              %tky           = <r2>-%tky
+              OldEnvId       = ls_src-env_id
+              OldExpenseType = ls_src-expense_type
+              OldGlAccount   = ls_src-gl_account
+              OldAutoApprLim = ls_src-auto_appr_lim
+              OldCurrency    = ls_src-currency
+              OldVersionNo   = ls_src-version_no
+            ) ).
 
       ENDIF.
     ENDLOOP.

@@ -1,27 +1,21 @@
- REPORT zcheck_fi_reqid.
+REPORT zcheck_fi_reqid.
 
-  WRITE: / '=== ZCONFREQH (FI APPROVED) ==='.
-  SELECT req_id, status, module_id FROM zconfreqh
-    WHERE module_id = 'FI' AND status = 'APPROVED'
-    INTO TABLE @DATA(lt_h).
-  LOOP AT lt_h INTO DATA(ls_h).
-    WRITE: / ls_h-req_id, ls_h-status, ls_h-module_id.
+  WRITE: / '=== ALL ZCONFREQH ==='.
+  SELECT req_id, status, module_id, req_title FROM zconfreqh
+    INTO TABLE @DATA(lt_all).
+  LOOP AT lt_all INTO DATA(ls_a).
+    WRITE: / ls_a-req_id, ls_a-module_id, ls_a-status, ls_a-req_title.
   ENDLOOP.
+  WRITE: / |Total: { lines( lt_all ) }|.
 
   WRITE: / ''.
-  WRITE: / '=== ZFILIMITREQ (DISTINCT REQ_ID) ==='.
+  WRITE: / '=== ZFILIMITREQ DISTINCT REQ_ID ==='.
   SELECT DISTINCT req_id FROM zfilimitreq INTO TABLE @DATA(lt_r).
   LOOP AT lt_r INTO DATA(ls_r).
-    WRITE: / ls_r-req_id.
-  ENDLOOP.
-
-  WRITE: / ''.
-  WRITE: / '=== MATCH CHECK ==='.
-  LOOP AT lt_h INTO ls_h.
-    READ TABLE lt_r WITH KEY req_id = ls_h-req_id TRANSPORTING NO FIELDS.
+    READ TABLE lt_all WITH KEY req_id = ls_r-req_id INTO DATA(ls_match).
     IF sy-subrc = 0.
-      WRITE: / 'MATCH:', ls_h-req_id.
+      WRITE: / 'MATCH:', ls_r-req_id, ls_match-status, ls_match-module_id.
     ELSE.
-      WRITE: / 'NO MATCH:', ls_h-req_id.
+      WRITE: / 'NO MATCH:', ls_r-req_id.
     ENDIF.
   ENDLOOP.
