@@ -22,6 +22,7 @@ define behavior for ZI_MM_SAFE_STOCK alias SafeStock
 
   create;
   update;
+  delete;
 
   draft action Edit;
   draft action Activate;

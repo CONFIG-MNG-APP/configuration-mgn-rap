@@ -1,4 +1,4 @@
-CLASS lhc_Req DEFINITION INHERITING FROM cl_abap_behavior_handler.
+    CLASS lhc_Req DEFINITION INHERITING FROM cl_abap_behavior_handler.
   PRIVATE SECTION.
 
     CONSTANTS:
@@ -764,6 +764,11 @@ CLASS lhc_Req IMPLEMENTATION.
     DATA lv_now TYPE timestampl.
     GET TIME STAMP FIELD lv_now.
 
+    DATA lv_ver_ss TYPE i.
+    DATA lv_ver_rt TYPE i.
+    DATA lv_ver_fi TYPE i.
+    DATA lv_ver_sd TYPE i.
+
     READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
       ENTITY Req ALL FIELDS WITH CORRESPONDING #( keys )
       RESULT DATA(reqs).
@@ -795,6 +800,21 @@ CLASS lhc_Req IMPLEMENTATION.
         ) TO reported-req.
         APPEND VALUE #( %tky = <r>-%tky ) TO failed-req.
         CONTINUE.
+      ENDIF.
+
+            " ── Lấy version toàn cục của module ở PRD ──
+      IF lv_next_env = 'PRD'.
+        SELECT MAX( version_no ) FROM zmmsafestock  WHERE env_id = 'PRD' INTO @lv_ver_ss.
+        lv_ver_ss = lv_ver_ss + 1.
+
+        SELECT MAX( version_no ) FROM zmmrouteconf   WHERE env_id = 'PRD' INTO @lv_ver_rt.
+        lv_ver_rt = lv_ver_rt + 1.
+
+        SELECT MAX( version_no ) FROM zfilimitconf   WHERE env_id = 'PRD' INTO @lv_ver_fi.
+        lv_ver_fi = lv_ver_fi + 1.
+
+        SELECT MAX( version_no ) FROM zsd_price_conf WHERE env_id = 'PRD' INTO @lv_ver_sd.
+        lv_ver_sd = lv_ver_sd + 1.
       ENDIF.
 
 
@@ -829,7 +849,7 @@ CLASS lhc_Req IMPLEMENTATION.
           plant_id   = <ss>-plant_id
           mat_group  = <ss>-mat_group
           min_qty    = <ss>-min_qty
-          version_no = COND #( WHEN lv_next_env = 'PRD' THEN <ss>-version_no + 1 ELSE <ss>-version_no )
+          version_no = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_ss ELSE <ss>-version_no )
           created_by = sy-uname  created_at = lv_now
           changed_by = sy-uname  changed_at = lv_now ) ).
       ENDLOOP.
@@ -850,7 +870,7 @@ CLASS lhc_Req IMPLEMENTATION.
           inspector_id = <rt>-inspector_id
           trans_mode   = <rt>-trans_mode
           is_allowed   = <rt>-is_allowed
-          version_no = COND #( WHEN lv_next_env = 'PRD' THEN <rt>-version_no + 1 ELSE <rt>-version_no )
+          version_no = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_rt ELSE <rt>-version_no )
           created_by   = sy-uname  created_at = lv_now
           changed_by   = sy-uname  changed_at = lv_now ) ).
       ENDLOOP.
@@ -869,7 +889,7 @@ CLASS lhc_Req IMPLEMENTATION.
           gl_account    = <fi>-gl_account
           auto_appr_lim = <fi>-auto_appr_lim
           currency      = <fi>-currency
-          version_no = COND #( WHEN lv_next_env = 'PRD' THEN <fi>-version_no + 1 ELSE <fi>-version_no )
+          version_no = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_fi ELSE <fi>-version_no )
           created_by    = sy-uname  created_at = lv_now
           changed_by    = sy-uname  changed_at = lv_now ) ).
       ENDLOOP.
@@ -892,7 +912,7 @@ CLASS lhc_Req IMPLEMENTATION.
           currency      = <sd>-currency
           valid_from    = <sd>-valid_from
           valid_to      = <sd>-valid_to
-          version_no    = COND #( WHEN lv_next_env = 'PRD' THEN <sd>-version_no + 1 ELSE <sd>-version_no )
+          version_no    = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_sd ELSE <sd>-version_no )
           created_by    = sy-uname  created_at = lv_now
           changed_by    = sy-uname  changed_at = lv_now ) ).
       ENDLOOP.

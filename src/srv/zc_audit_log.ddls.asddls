@@ -71,5 +71,4 @@ define view entity ZC_AUDIT_LOG
   @UI.identification: [{ position: 100, label: 'Object Key' }]
       ObjectKey
 }
-// >>> THÊM MỆNH ĐỀ WHERE VÀO ĐÂY ĐỂ CHỈ HIỂN THỊ LOG DUYỆT <<<
-where ActionType = 'APPROVE'
+
