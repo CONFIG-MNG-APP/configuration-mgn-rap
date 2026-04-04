@@ -1,5 +1,5 @@
 projection;
-strict;
+strict ( 2 );
 use draft;
 
 define behavior for ZC_CONF_REQ_H
