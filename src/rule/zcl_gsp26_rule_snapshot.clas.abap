@@ -12,17 +12,17 @@ CLASS zcl_gsp26_rule_snapshot DEFINITION PUBLIC FINAL CREATE PUBLIC.
       IMPORTING is_price_data TYPE zsd_price_conf.
 
     CLASS-METHODS restore_from_snapshot
-      IMPORTING iv_req_id     TYPE sysuuid_x16
-                iv_changed_by TYPE syuname
+      IMPORTING iv_req_id         TYPE sysuuid_x16
+                iv_changed_by     TYPE syuname
       RETURNING VALUE(rt_results) TYPE tt_restore_results.
 
     CLASS-METHODS create_approve_snapshot
-      IMPORTING iv_req_id     TYPE sysuuid_x16
-                iv_changed_by TYPE syuname
+      IMPORTING iv_req_id         TYPE sysuuid_x16
+                iv_changed_by     TYPE syuname
       RETURNING VALUE(rt_results) TYPE tt_restore_results.
 
     CLASS-METHODS increment_version
-      IMPORTING iv_req_id TYPE sysuuid_x16
+      IMPORTING iv_req_id         TYPE sysuuid_x16
       RETURNING VALUE(rt_results) TYPE tt_restore_results.
 
   PROTECTED SECTION.
@@ -84,83 +84,83 @@ CLASS zcl_gsp26_rule_snapshot IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD create_approve_snapshot.
-      DATA lt_logs TYPE STANDARD TABLE OF zauditlog.
-      DATA ls_log TYPE zauditlog.
+    DATA lt_logs TYPE STANDARD TABLE OF zauditlog.
+    DATA ls_log TYPE zauditlog.
 
-      " 1) Snapshot ZSD_PRICE_CONF records
-      SELECT * FROM zsd_price_conf
-        WHERE req_id = @iv_req_id
-        INTO TABLE @DATA(lt_price).
+    " 1) Snapshot ZSD_PRICE_CONF records
+    SELECT * FROM zsd_price_conf
+      WHERE req_id = @iv_req_id
+      INTO TABLE @DATA(lt_price).
 
-      LOOP AT lt_price INTO DATA(ls_price).
-        CLEAR ls_log.
-        TRY.
-            ls_log-log_id = cl_system_uuid=>create_uuid_x16_static( ).
-          CATCH cx_uuid_error.
-            CONTINUE.
-        ENDTRY.
-        ls_log-req_id      = iv_req_id.
-        ls_log-conf_id     = ls_price-item_id.
-        ls_log-module_id   = 'SD'.
-        ls_log-action_type = 'APPROVE'.
-        ls_log-table_name  = 'ZSD_PRICE_CONF'.
-        ls_log-env_id      = ls_price-env_id.
-        ls_log-object_key  = ls_price-item_id.
-        ls_log-changed_by  = iv_changed_by.
-        GET TIME STAMP FIELD ls_log-changed_at.
-        APPEND ls_log TO lt_logs.
-      ENDLOOP.
+    LOOP AT lt_price INTO DATA(ls_price).
+      CLEAR ls_log.
+      TRY.
+          ls_log-log_id = cl_system_uuid=>create_uuid_x16_static( ).
+        CATCH cx_uuid_error.
+          CONTINUE.
+      ENDTRY.
+      ls_log-req_id      = iv_req_id.
+      ls_log-conf_id     = ls_price-item_id.
+      ls_log-module_id   = 'SD'.
+      ls_log-action_type = 'APPROVE'.
+      ls_log-table_name  = 'ZSD_PRICE_CONF'.
+      ls_log-env_id      = ls_price-env_id.
+      ls_log-object_key  = ls_price-item_id.
+      ls_log-changed_by  = iv_changed_by.
+      GET TIME STAMP FIELD ls_log-changed_at.
+      APPEND ls_log TO lt_logs.
+    ENDLOOP.
 
-      IF lt_price IS NOT INITIAL.
-        APPEND VALUE #( success    = abap_true
-                        message    = 'SD Price snapshot created'
-                        table_name = 'ZSD_PRICE_CONF' )
-          TO rt_results.
-      ENDIF.
+    IF lt_price IS NOT INITIAL.
+      APPEND VALUE #( success    = abap_true
+                      message    = 'SD Price snapshot created'
+                      table_name = 'ZSD_PRICE_CONF' )
+        TO rt_results.
+    ENDIF.
 
-      " 2) Snapshot ZMMSAFESTOCK records
-      SELECT * FROM zmmsafestock
-        WHERE req_id = @iv_req_id
-        INTO TABLE @DATA(lt_stock).
+    " 2) Snapshot ZMMSAFESTOCK records
+    SELECT * FROM zmmsafestock
+      WHERE req_id = @iv_req_id
+      INTO TABLE @DATA(lt_stock).
 
-      LOOP AT lt_stock INTO DATA(ls_stock).
-        CLEAR ls_log.
-        TRY.
-            ls_log-log_id = cl_system_uuid=>create_uuid_x16_static( ).
-          CATCH cx_uuid_error.
-            CONTINUE.
-        ENDTRY.
-        ls_log-req_id      = iv_req_id.
-        ls_log-conf_id     = ls_stock-item_id.
-        ls_log-module_id   = 'MM'.
-        ls_log-action_type = 'APPROVE'.
-        ls_log-table_name  = 'ZMMSAFESTOCK'.
-        ls_log-env_id      = ls_stock-env_id.
-        ls_log-object_key  = ls_stock-item_id.
-        ls_log-changed_by  = iv_changed_by.
-        GET TIME STAMP FIELD ls_log-changed_at.
-        APPEND ls_log TO lt_logs.
-      ENDLOOP.
+    LOOP AT lt_stock INTO DATA(ls_stock).
+      CLEAR ls_log.
+      TRY.
+          ls_log-log_id = cl_system_uuid=>create_uuid_x16_static( ).
+        CATCH cx_uuid_error.
+          CONTINUE.
+      ENDTRY.
+      ls_log-req_id      = iv_req_id.
+      ls_log-conf_id     = ls_stock-item_id.
+      ls_log-module_id   = 'MM'.
+      ls_log-action_type = 'APPROVE'.
+      ls_log-table_name  = 'ZMMSAFESTOCK'.
+      ls_log-env_id      = ls_stock-env_id.
+      ls_log-object_key  = ls_stock-item_id.
+      ls_log-changed_by  = iv_changed_by.
+      GET TIME STAMP FIELD ls_log-changed_at.
+      APPEND ls_log TO lt_logs.
+    ENDLOOP.
 
-      IF lt_stock IS NOT INITIAL.
-        APPEND VALUE #( success    = abap_true
-                        message    = 'MM Safe Stock snapshot created'
-                        table_name = 'ZMMSAFESTOCK' )
-          TO rt_results.
-      ENDIF.
+    IF lt_stock IS NOT INITIAL.
+      APPEND VALUE #( success    = abap_true
+                      message    = 'MM Safe Stock snapshot created'
+                      table_name = 'ZMMSAFESTOCK' )
+        TO rt_results.
+    ENDIF.
 
-      " Batch INSERT — 1 lần thay vì từng dòng
-      IF lt_logs IS NOT INITIAL.
-        INSERT zauditlog FROM TABLE @lt_logs.
-      ENDIF.
+    " Batch INSERT — 1 lần thay vì từng dòng
+    IF lt_logs IS NOT INITIAL.
+      INSERT zauditlog FROM TABLE @lt_logs.
+    ENDIF.
 
-      IF rt_results IS INITIAL.
-        APPEND VALUE #( success    = abap_false
-                        message    = 'No config data found for request' )
-          TO rt_results.
-      ENDIF.
+    IF rt_results IS INITIAL.
+      APPEND VALUE #( success    = abap_false
+                      message    = 'No config data found for request' )
+        TO rt_results.
+    ENDIF.
 
-    ENDMETHOD.
+  ENDMETHOD.
   METHOD restore_from_snapshot.
 
     DATA ls_log TYPE zauditlog.
@@ -183,11 +183,13 @@ CLASS zcl_gsp26_rule_snapshot IMPLEMENTATION.
 
     LOOP AT lt_snapshots INTO DATA(ls_snap).
 
-            CASE ls_snap-table_name.
+      CASE ls_snap-table_name.
         WHEN 'ZSD_PRICE_CONF'.
           DATA ls_price TYPE zsd_price_conf.
           IF ls_snap-old_data IS NOT INITIAL.
             /ui2/cl_json=>deserialize( EXPORTING json = ls_snap-old_data CHANGING data = ls_price ).
+            ls_price-item_id = ls_snap-object_key.
+            ls_price-client  = sy-mandt.
             MODIFY zsd_price_conf FROM @ls_price.
             APPEND VALUE #( success    = abap_true
                             message    = 'SD Price Config restored'
@@ -203,6 +205,8 @@ CLASS zcl_gsp26_rule_snapshot IMPLEMENTATION.
           DATA ls_stock TYPE zmmsafestock.
           IF ls_snap-old_data IS NOT INITIAL.
             /ui2/cl_json=>deserialize( EXPORTING json = ls_snap-old_data CHANGING data = ls_stock ).
+            ls_stock-item_id = ls_snap-object_key.
+            ls_stock-client  = sy-mandt.
             MODIFY zmmsafestock FROM @ls_stock.
             APPEND VALUE #( success    = abap_true
                             message    = 'MM Safe Stock restored'
@@ -218,6 +222,8 @@ CLASS zcl_gsp26_rule_snapshot IMPLEMENTATION.
           DATA ls_limit TYPE zfilimitconf.
           IF ls_snap-old_data IS NOT INITIAL.
             /ui2/cl_json=>deserialize( EXPORTING json = ls_snap-old_data CHANGING data = ls_limit ).
+            ls_limit-item_id = ls_snap-object_key.
+            ls_limit-client  = sy-mandt.
             MODIFY zfilimitconf FROM @ls_limit.
             APPEND VALUE #( success    = abap_true
                             message    = 'FI Limit restored'
@@ -233,6 +239,8 @@ CLASS zcl_gsp26_rule_snapshot IMPLEMENTATION.
           DATA ls_route TYPE zmmrouteconf.
           IF ls_snap-old_data IS NOT INITIAL.
             /ui2/cl_json=>deserialize( EXPORTING json = ls_snap-old_data CHANGING data = ls_route ).
+            ls_route-item_id = ls_snap-object_key.
+            ls_route-client  = sy-mandt.
             MODIFY zmmrouteconf FROM @ls_route.
             APPEND VALUE #( success    = abap_true
                             message    = 'MM Route Config restored'
@@ -276,4 +284,5 @@ CLASS zcl_gsp26_rule_snapshot IMPLEMENTATION.
   ENDMETHOD.
 
 ENDCLASS.
+
 

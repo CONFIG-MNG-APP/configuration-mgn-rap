@@ -1,88 +1,96 @@
 REPORT zseed_conffielddef.
 
-DATA: lt_field TYPE STANDARD TABLE OF zconffielddef.
+DATA: lt_field    TYPE STANDARD TABLE OF zconffielddef,
+      lv_conf_id  TYPE zconfcatalog-conf_id.
 
-APPEND VALUE zconffielddef(
-  client          = sy-mandt
-  conf_id         = 'B1994EEB6D141FE184F1BC2FC73F537F'
-  field_name      = 'ENV_ID'
-  field_label     = 'Environment'
-  data_type       = 'CHAR10'
-  is_required     = abap_true
-  value_help_type = 'ENV'
-) TO lt_field.
+*----------------------------------------------------------------------*
+* Helper macro: skip if conf_id not found
+*----------------------------------------------------------------------*
+DEFINE add_field.
+  IF lv_conf_id IS NOT INITIAL.
+    APPEND VALUE zconffielddef(
+      client          = sy-mandt
+      conf_id         = lv_conf_id
+      field_name      = &1
+      field_label     = &2
+      data_type       = &3
+      is_required     = &4
+      value_help_type = &5
+    ) TO lt_field.
+  ENDIF.
+END-OF-DEFINITION.
 
-APPEND VALUE zconffielddef(
-  client          = sy-mandt
-  conf_id         = 'B1994EEB6D141FE184F1BC2FC73F537F'
-  field_name      = 'PLANT_ID'
-  field_label     = 'Plant'
-  data_type       = 'CHAR10'
-  is_required     = abap_true
-  value_help_type = 'PLANT'
-) TO lt_field.
+*======================================================================*
+* MM – Warehouse Route
+*======================================================================*
+SELECT SINGLE conf_id FROM zconfcatalog
+  WHERE target_cds = 'ZI_MM_ROUTE_CONF'
+  INTO @lv_conf_id.
 
-APPEND VALUE zconffielddef(
-  client          = sy-mandt
-  conf_id         = 'B1994EEB6D141FE184F1BC2FC73F537F'
-  field_name      = 'SEND_WH'
-  field_label     = 'Sending Warehouse'
-  data_type       = 'CHAR10'
-  is_required     = abap_true
-  value_help_type = 'WAREHOUSE'
-) TO lt_field.
+add_field 'ENV_ID'      'Environment'         'CHAR10'  abap_true  'ENV'.
+add_field 'PLANT_ID'    'Plant'               'CHAR10'  abap_true  'PLANT'.
+add_field 'SEND_WH'     'Sending Warehouse'   'CHAR10'  abap_true  'WAREHOUSE'.
+add_field 'RECEIVE_WH'  'Receiving Warehouse' 'CHAR10'  abap_true  'WAREHOUSE'.
+add_field 'INSPECTOR_ID' 'Inspector'          'CHAR20'  abap_false ''.
+add_field 'TRANS_MODE'  'Transport Mode'      'CHAR10'  abap_true  'TRANSPORT'.
+add_field 'IS_ALLOWED'  'Is Allowed'          'BOOLEAN' abap_true  ''.
+add_field 'VERSION_NO'  'Version'             'NUMC'    abap_true  ''.
 
-APPEND VALUE zconffielddef(
-  client          = sy-mandt
-  conf_id         = 'B1994EEB6D141FE184F1BC2FC73F537F'
-  field_name      = 'RECEIVE_WH'
-  field_label     = 'Receiving Warehouse'
-  data_type       = 'CHAR10'
-  is_required     = abap_true
-  value_help_type = 'WAREHOUSE'
-) TO lt_field.
+*======================================================================*
+* MM – Safety Stock
+*======================================================================*
+SELECT SINGLE conf_id FROM zconfcatalog
+  WHERE target_cds = 'ZI_MM_SAFE_STOCK'
+  INTO @lv_conf_id.
 
-APPEND VALUE zconffielddef(
-  client          = sy-mandt
-  conf_id         = 'B1994EEB6D141FE184F1BC2FC73F537F'
-  field_name      = 'INSPECTOR_ID'
-  field_label     = 'Inspector'
-  data_type       = 'CHAR20'
-  is_required     = abap_false
-  value_help_type = ''
-) TO lt_field.
+add_field 'ENV_ID'    'Environment'     'CHAR10'  abap_true  'ENV'.
+add_field 'PLANT_ID'  'Plant'           'CHAR10'  abap_true  'PLANT'.
+add_field 'MAT_GROUP' 'Material Group'  'CHAR10'  abap_false 'MAT_GROUP'.
+add_field 'MIN_QTY'   'Minimum Qty'     'INT8'    abap_false ''.
+add_field 'VERSION_NO' 'Version'        'INT4'    abap_true  ''.
 
-APPEND VALUE zconffielddef(
-  client          = sy-mandt
-  conf_id         = 'B1994EEB6D141FE184F1BC2FC73F537F'
-  field_name      = 'TRANS_MODE'
-  field_label     = 'Transport Mode'
-  data_type       = 'CHAR10'
-  is_required     = abap_true
-  value_help_type = 'TRANSPORT'
-) TO lt_field.
+*======================================================================*
+* FI – Expense Limit
+*======================================================================*
+SELECT SINGLE conf_id FROM zconfcatalog
+  WHERE target_cds = 'ZI_FI_LIMIT_CONF'
+  INTO @lv_conf_id.
 
-APPEND VALUE zconffielddef(
-  client          = sy-mandt
-  conf_id         = 'B1994EEB6D141FE184F1BC2FC73F537F'
-  field_name      = 'IS_ALLOWED'
-  field_label     = 'Is Allowed'
-  data_type       = 'BOOLEAN'
-  is_required     = abap_true
-  value_help_type = ''
-) TO lt_field.
+add_field 'ENV_ID'        'Environment'         'CHAR10'  abap_true  'ENV'.
+add_field 'EXPENSE_TYPE'  'Expense Type'        'CHAR30'  abap_true  'EXPENSE_TYPE'.
+add_field 'GL_ACCOUNT'    'GL Account'          'CHAR10'  abap_true  'GL_ACCOUNT'.
+add_field 'AUTO_APPR_LIM' 'Auto Approval Limit' 'DEC'     abap_true  ''.
+add_field 'CURRENCY'      'Currency'            'CUKY'    abap_false 'CURRENCY'.
+add_field 'VERSION_NO'    'Version'             'INT4'    abap_true  ''.
 
-APPEND VALUE zconffielddef(
-  client          = sy-mandt
-  conf_id         = 'B1994EEB6D141FE184F1BC2FC73F537F'
-  field_name      = 'VERSION_NO'
-  field_label     = 'Version'
-  data_type       = 'NUMC'
-  is_required     = abap_true
-  value_help_type = ''
-) TO lt_field.
+*======================================================================*
+* SD – Price Config
+*======================================================================*
+SELECT SINGLE conf_id FROM zconfcatalog
+  WHERE target_cds = 'ZI_SD_PRICE_CONF'
+  INTO @lv_conf_id.
 
-INSERT zconffielddef FROM TABLE @lt_field.
+add_field 'ENV_ID'        'Environment'     'CHAR10'  abap_true  'ENV'.
+add_field 'BRANCH_ID'     'Branch'          'CHAR10'  abap_false ''.
+add_field 'CUST_GROUP'    'Customer Group'  'CHAR10'  abap_false 'CUST_GROUP'.
+add_field 'MATERIAL_GRP'  'Material Group'  'CHAR10'  abap_false 'MAT_GROUP'.
+add_field 'MAX_DISCOUNT'  'Max Discount'    'CURR'    abap_false ''.
+add_field 'MIN_ORDER_VAL' 'Min Order Value' 'INT4'    abap_false ''.
+add_field 'APPROVER_GRP'  'Approver Group'  'CHAR20'  abap_false ''.
+add_field 'CURRENCY'      'Currency'        'CUKY'    abap_false 'CURRENCY'.
+add_field 'VALID_FROM'    'Valid From'      'DATS'    abap_false ''.
+add_field 'VALID_TO'      'Valid To'        'DATS'    abap_false ''.
+add_field 'VERSION_NO'    'Version'         'INT4'    abap_true  ''.
+
+*======================================================================*
+* Insert
+*======================================================================*
+IF lt_field IS INITIAL.
+  WRITE: / 'No field definitions to insert – check ZCONFCATALOG entries.'.
+  RETURN.
+ENDIF.
+
+MODIFY zconffielddef FROM TABLE @lt_field.
 COMMIT WORK.
 
 WRITE: / |Seeded { sy-dbcnt } row(s) into ZCONFFIELDDEF.|.
