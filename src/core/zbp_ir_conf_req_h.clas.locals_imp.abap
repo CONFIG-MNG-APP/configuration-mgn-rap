@@ -155,7 +155,6 @@
       ENDMETHOD.
 
 
-
       METHOD approve.
         DATA: lv_now TYPE timestampl.
         GET TIME STAMP FIELD lv_now.
@@ -232,7 +231,7 @@
           "         duplicate within same request, orphaned source_item_id
           " =============================================================
 
-          " ── MMSS ──────────────────────────────────────────────────────
+          " MMSS
           SELECT * FROM zmmsafestock_req
             WHERE req_id = @<r>-ReqId
             INTO TABLE @DATA(lt_ss_pre).
@@ -295,7 +294,7 @@
             ENDCASE.
           ENDLOOP.
 
-          " ── MM Routes ─────────────────────────────────────────────────
+          " MM Routes
           SELECT * FROM zmmrouteconf_req
             WHERE req_id = @<r>-ReqId
             INTO TABLE @DATA(lt_rt_pre).
@@ -359,7 +358,7 @@
             ENDCASE.
           ENDLOOP.
 
-          " ── FI Limit ──────────────────────────────────────────────────
+          " FI Limit
           SELECT * FROM zfilimitreq
             WHERE req_id = @<r>-ReqId
             INTO TABLE @DATA(lt_fi_pre).
@@ -422,7 +421,7 @@
             ENDCASE.
           ENDLOOP.
 
-          " ── SD Price ──────────────────────────────────────────────────
+          "  SD Price
           SELECT * FROM zsd_price_req
             WHERE req_id = @<r>-ReqId
             INTO TABLE @DATA(lt_sd_pre).
@@ -521,78 +520,71 @@
 
           DATA(lt_ver_results) = zcl_gsp26_rule_snapshot=>increment_version( iv_req_id = <r>-ReqId ).
 
+          " WRITE-BACK VÀ GHI LOG CHI TIẾT ITEM: zmmsafestock_req
+          SELECT * FROM zmmsafestock_req WHERE req_id = @<r>-ReqId INTO TABLE @DATA(lt_ss_req).
+          IF lt_ss_req IS NOT INITIAL.
+            LOOP AT lt_ss_req ASSIGNING FIELD-SYMBOL(<ss>).
 
-          " -------------------------------------------------------------
-          " ── WRITE-BACK VÀ GHI LOG CHI TIẾT ITEM: zmmsafestock_req ──
-          " -------------------------------------------------------------
-                       SELECT * FROM zmmsafestock_req WHERE req_id = @<r>-ReqId INTO TABLE @DATA(lt_ss_req).
-              IF lt_ss_req IS NOT INITIAL.
-                LOOP AT lt_ss_req ASSIGNING FIELD-SYMBOL(<ss>).
+              ls_audit_log-client      = sy-mandt.
+              TRY. ls_audit_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
+              ls_audit_log-req_id      = <r>-ReqId.
+              ls_audit_log-conf_id     = <ss>-conf_id.
+              ls_audit_log-module_id   = 'MM'.
+              ls_audit_log-action_type = 'APPROVE'.
+              ls_audit_log-table_name  = 'ZMMSAFESTOCK'.
+              ls_audit_log-env_id      = lc_env_dev.
+              ls_audit_log-object_key  = COND #( WHEN <ss>-action_type = 'C' OR <ss>-action_type = 'CREATE'
+                                                 THEN <ss>-item_id
+                                                 ELSE <ss>-source_item_id ).
+              ls_audit_log-old_data    = |\{"PLANT_ID":"{ <ss>-old_plant_id }","MAT_GROUP":"{ <ss>-old_mat_group }","MIN_QTY":"{ <ss>-old_min_qty }"\}|.
+              ls_audit_log-new_data    = |\{"PLANT_ID":"{ <ss>-plant_id }","MAT_GROUP":"{ <ss>-mat_group }","MIN_QTY":"{ <ss>-min_qty }"\}|.
+              ls_audit_log-changed_by  = sy-uname.
+              ls_audit_log-changed_at  = lv_now.
+              APPEND ls_audit_log TO lt_audit_log.
+              CLEAR ls_audit_log.
 
-                  ls_audit_log-client      = sy-mandt.
-                  TRY. ls_audit_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-                  ls_audit_log-req_id      = <r>-ReqId.
-                  ls_audit_log-conf_id     = <ss>-conf_id.
-                  ls_audit_log-module_id   = 'MM'.
-                  ls_audit_log-action_type = 'APPROVE'.
-                  ls_audit_log-table_name  = 'ZMMSAFESTOCK'.
-                  ls_audit_log-env_id      = lc_env_dev.
-                  ls_audit_log-object_key  = COND #( WHEN <ss>-action_type = 'C' OR <ss>-action_type = 'CREATE'
-                                                     THEN <ss>-item_id
-                                                     ELSE <ss>-source_item_id ).
-                  ls_audit_log-old_data    = |\{"PLANT_ID":"{ <ss>-old_plant_id }","MAT_GROUP":"{ <ss>-old_mat_group }","MIN_QTY":"{ <ss>-old_min_qty }"\}|.
-                  ls_audit_log-new_data    = |\{"PLANT_ID":"{ <ss>-plant_id }","MAT_GROUP":"{ <ss>-mat_group }","MIN_QTY":"{ <ss>-min_qty }"\}|.
-                  ls_audit_log-changed_by  = sy-uname.
-                  ls_audit_log-changed_at  = lv_now.
-                  APPEND ls_audit_log TO lt_audit_log.
-                  CLEAR ls_audit_log.
+              CLEAR lv_record_exists.
+              CASE <ss>-action_type.
+                WHEN 'UPDATE' OR 'U'.
+                  " Update only value fields on the DEV row — do NOT change env_id.
+                  " The row already belongs to DEV (source_item_id points to the DEV row).
+                  SELECT SINGLE @abap_true FROM zmmsafestock
+                    WHERE item_id = @<ss>-source_item_id INTO @lv_record_exists.
+                  IF lv_record_exists = abap_true.
+                    UPDATE zmmsafestock SET
+                      min_qty    = @<ss>-min_qty,
+                      version_no = @<ss>-version_no,
+                      req_id     = @<r>-ReqId,
+                      changed_by = @sy-uname,
+                      changed_at = @lv_now
+                    WHERE item_id = @<ss>-source_item_id.
+                  ENDIF.
+                WHEN 'CREATE' OR 'C'.
+                  INSERT zmmsafestock FROM @( VALUE zmmsafestock(
+                    client     = sy-mandt
+                    item_id    = <ss>-item_id
+                    req_id     = <r>-ReqId
+                    env_id     = lc_env_dev
+                    plant_id   = <ss>-plant_id
+                    mat_group  = <ss>-mat_group
+                    min_qty    = <ss>-min_qty
+                    version_no = 1
+                    created_by = <ss>-created_by
+                    created_at = lv_now
+                    changed_by = sy-uname
+                    changed_at = lv_now ) ).
+                WHEN 'DELETE' OR 'X'.
+                  DELETE FROM zmmsafestock WHERE item_id = @<ss>-source_item_id.
+              ENDCASE.
+            ENDLOOP.
+            UPDATE zmmsafestock_req SET
+              line_status = @gc_st_approved,
+              changed_by  = @sy-uname,
+              changed_at  = @lv_now
+            WHERE req_id = @<r>-ReqId.
+          ENDIF.
 
-                  CLEAR lv_record_exists.
-                  CASE <ss>-action_type.
-                    WHEN 'UPDATE' OR 'U'.
-                      " Update only value fields on the DEV row — do NOT change env_id.
-                      " The row already belongs to DEV (source_item_id points to the DEV row).
-                      SELECT SINGLE @abap_true FROM zmmsafestock
-                        WHERE item_id = @<ss>-source_item_id INTO @lv_record_exists.
-                      IF lv_record_exists = abap_true.
-                        UPDATE zmmsafestock SET
-                          min_qty    = @<ss>-min_qty,
-                          version_no = @<ss>-version_no,
-                          req_id     = @<r>-ReqId,
-                          changed_by = @sy-uname,
-                          changed_at = @lv_now
-                        WHERE item_id = @<ss>-source_item_id.
-                      ENDIF.
-                    WHEN 'CREATE' OR 'C'.
-                      INSERT zmmsafestock FROM @( VALUE zmmsafestock(
-                        client     = sy-mandt
-                        item_id    = <ss>-item_id
-                        req_id     = <r>-ReqId
-                        env_id     = lc_env_dev
-                        plant_id   = <ss>-plant_id
-                        mat_group  = <ss>-mat_group
-                        min_qty    = <ss>-min_qty
-                        version_no = 1
-                        created_by = <ss>-created_by
-                        created_at = lv_now
-                        changed_by = sy-uname
-                        changed_at = lv_now ) ).
-                    WHEN 'DELETE' OR 'X'.
-                      DELETE FROM zmmsafestock WHERE item_id = @<ss>-source_item_id.
-                  ENDCASE.
-                ENDLOOP.
-                UPDATE zmmsafestock_req SET
-                  line_status = @gc_st_approved,
-                  changed_by  = @sy-uname,
-                  changed_at  = @lv_now
-                WHERE req_id = @<r>-ReqId.
-              ENDIF.
-
-
-
-          " -------------------------------------------------------------
-          " ── WRITE-BACK VÀ GHI LOG CHI TIẾT ITEM: zmmrouteconf_req ──
-          " -------------------------------------------------------------
+          " WRITE-BACK VÀ GHI LOG CHI TIẾT ITEM: zmmrouteconf_req
           SELECT * FROM zmmrouteconf_req WHERE req_id = @<r>-ReqId INTO TABLE @DATA(lt_route_req).
           IF lt_route_req IS NOT INITIAL.
             LOOP AT lt_route_req ASSIGNING FIELD-SYMBOL(<rt>).
@@ -653,8 +645,7 @@
             UPDATE zmmrouteconf_req SET line_status = @gc_st_approved, changed_by = @sy-uname, changed_at = @lv_now WHERE req_id = @<r>-ReqId.
           ENDIF.
 
-          " ── WRITE-BACK VÀ GHI LOG CHI TIẾT ITEM: zfilimitreq ──
-          " -------------------------------------------------------------
+          " WRITE-BACK VÀ GHI LOG CHI TIẾT ITEM: zfilimitreq
           SELECT * FROM zfilimitreq WHERE req_id = @<r>-ReqId INTO TABLE @DATA(lt_fi_req).
           IF lt_fi_req IS NOT INITIAL.
             LOOP AT lt_fi_req ASSIGNING FIELD-SYMBOL(<fi>).
@@ -713,10 +704,7 @@
             UPDATE zfilimitreq SET line_status = @gc_st_approved, changed_by = @sy-uname, changed_at = @lv_now WHERE req_id = @<r>-ReqId.
           ENDIF.
 
-
-          " -------------------------------------------------------------
-          " ── WRITE-BACK VÀ GHI LOG CHI TIẾT ITEM: zsd_price_req ──
-          " -------------------------------------------------------------
+          "  WRITE-BACK VÀ GHI LOG CHI TIẾT ITEM: zsd_price_req
           SELECT * FROM zsd_price_req WHERE req_id = @<r>-ReqId INTO TABLE @DATA(lt_sd_req).
           IF lt_sd_req IS NOT INITIAL.
             LOOP AT lt_sd_req ASSIGNING FIELD-SYMBOL(<sd>).
@@ -783,9 +771,7 @@
             UPDATE zsd_price_req SET line_status = @gc_st_approved, changed_by = @sy-uname, changed_at = @lv_now WHERE req_id = @<r>-ReqId.
           ENDIF.
 
-          " =============================================================
-          " 🚀 PUSH NOTIFICATION: THÔNG BÁO CHO NGƯỜI TẠO REQUEST
-          " =============================================================
+          " THÔNG BÁO CHO NGƯỜI TẠO REQUEST
           CLEAR: lt_notifications, lt_recipients, ls_notification, ls_recipient.
 
           " 1. Xác định Người Nhận (Gửi ngược lại cho người tạo phiếu)
@@ -924,9 +910,7 @@
                             RejectedBy   = sy-uname
                             RejectedAt   = lv_now ) ).
 
-          " =============================================================
-          " 🚀 PUSH NOTIFICATION: THÔNG BÁO TỪ CHỐI CHO NGƯỜI TẠO REQUEST
-          " =============================================================
+          " PUSH NOTIFICATION: THÔNG BÁO TỪ CHỐI CHO NGƯỜI TẠO REQUEST
           DATA: lt_notif_rej TYPE /iwngw/if_notif_provider=>ty_t_notification,
                 ls_notif_rej TYPE /iwngw/if_notif_provider=>ty_s_notification,
                 lt_recip_rej TYPE /iwngw/if_notif_provider=>ty_t_notification_recipient,
@@ -1701,10 +1685,11 @@
 
         LOOP AT keys INTO DATA(ls_key).
           MODIFY ENTITIES OF zir_conf_req_h IN LOCAL MODE
-            ENTITY Req UPDATE FIELDS ( Reason ChangedBy ChangedAt )
+            ENTITY Req UPDATE FIELDS ( Reason ReqTitle ChangedBy ChangedAt )
             WITH VALUE #( (
               %tky      = ls_key-%tky
               Reason    = ls_key-%param-reason
+              ReqTitle  = ls_key-%param-req_title
               ChangedBy = sy-uname
               ChangedAt = lv_now
             ) ).
