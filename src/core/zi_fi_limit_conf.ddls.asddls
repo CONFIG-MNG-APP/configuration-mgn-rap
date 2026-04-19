@@ -5,7 +5,7 @@
 define root view entity ZI_FI_LIMIT_CONF
   as select from zfilimitreq
 
-  association [1..1] to ZI_ENV_DEF as _Env    on $projection.EnvId    = _Env.EnvId
+  association [1..1] to ZI_ENV_DEF as _Env    on $projection.EnvId = _Env.EnvId
   association [1..1] to ZI_ENV_DEF as _OldEnv on $projection.OldEnvId = _OldEnv.EnvId
 {
   key req_id            as ReqId,
@@ -21,9 +21,11 @@ define root view entity ZI_FI_LIMIT_CONF
       env_id            as EnvId,
 
       @EndUserText.label: 'Expense Type'
+      @Consumption.valueHelpDefinition: [{ entity: { name: 'ZC_VH_EXPENSE_TYPE', element: 'ExpenseType' } }]
       expense_type      as ExpenseType,
 
       @EndUserText.label: 'G/L Account'
+      @Consumption.valueHelpDefinition: [{ entity: { name: 'ZC_VH_GL_ACCOUNT', element: 'GlAccount' } }]
       gl_account        as GlAccount,
 
       @EndUserText.label: 'Auto Approval Limit'

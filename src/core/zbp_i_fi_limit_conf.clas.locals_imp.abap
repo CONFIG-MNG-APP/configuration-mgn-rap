@@ -138,21 +138,11 @@ CLASS lhc_LimitConf IMPLEMENTATION.
   METHOD validate_mandatory.
     READ ENTITIES OF zi_fi_limit_conf IN LOCAL MODE
       ENTITY LimitConf
-        FIELDS ( EnvId ExpenseType GlAccount AutoApprLim )
+        FIELDS ( ExpenseType GlAccount AutoApprLim Currency )
         WITH CORRESPONDING #( keys )
       RESULT DATA(lt_entities).
 
     LOOP AT lt_entities INTO DATA(entity).
-      IF entity-EnvId IS INITIAL.
-        APPEND VALUE #( %tky = entity-%tky ) TO failed-limitconf.
-        APPEND VALUE #( %tky = entity-%tky
-          %msg = new_message_with_text(
-            severity = if_abap_behv_message=>severity-error
-            text     = 'Environment ID is mandatory' )
-          %element-EnvId = if_abap_behv=>mk-on
-        ) TO reported-limitconf.
-      ENDIF.
-
       IF entity-ExpenseType IS INITIAL.
         APPEND VALUE #( %tky = entity-%tky ) TO failed-limitconf.
         APPEND VALUE #( %tky = entity-%tky
@@ -161,6 +151,20 @@ CLASS lhc_LimitConf IMPLEMENTATION.
             text     = 'Expense Type is mandatory' )
           %element-ExpenseType = if_abap_behv=>mk-on
         ) TO reported-limitconf.
+      ELSEIF entity-ExpenseType IS NOT INITIAL.
+        SELECT SINGLE @abap_true FROM zexpensetype
+          WHERE expense_type = @entity-ExpenseType
+            AND is_active    = @abap_true
+          INTO @DATA(lv_exp_exists).
+        IF lv_exp_exists <> abap_true.
+          APPEND VALUE #( %tky = entity-%tky ) TO failed-limitconf.
+          APPEND VALUE #( %tky = entity-%tky
+            %msg = new_message_with_text(
+              severity = if_abap_behv_message=>severity-error
+              text     = |Expense Type '{ entity-ExpenseType }' does not exist| )
+            %element-ExpenseType = if_abap_behv=>mk-on
+          ) TO reported-limitconf.
+        ENDIF.
       ENDIF.
 
       IF entity-GlAccount IS INITIAL.
@@ -171,6 +175,20 @@ CLASS lhc_LimitConf IMPLEMENTATION.
             text     = 'G/L Account is mandatory' )
           %element-GlAccount = if_abap_behv=>mk-on
         ) TO reported-limitconf.
+      ELSEIF entity-GlAccount IS NOT INITIAL.
+        SELECT SINGLE @abap_true FROM zglaccount
+          WHERE gl_account = @entity-GlAccount
+            AND is_active  = @abap_true
+          INTO @DATA(lv_gl_exists).
+        IF lv_gl_exists <> abap_true.
+          APPEND VALUE #( %tky = entity-%tky ) TO failed-limitconf.
+          APPEND VALUE #( %tky = entity-%tky
+            %msg = new_message_with_text(
+              severity = if_abap_behv_message=>severity-error
+              text     = |GL Account '{ entity-GlAccount }' does not exist| )
+            %element-GlAccount = if_abap_behv=>mk-on
+          ) TO reported-limitconf.
+        ENDIF.
       ENDIF.
 
       IF entity-AutoApprLim IS INITIAL OR entity-AutoApprLim <= 0.
@@ -182,31 +200,23 @@ CLASS lhc_LimitConf IMPLEMENTATION.
           %element-AutoApprLim = if_abap_behv=>mk-on
         ) TO reported-limitconf.
       ENDIF.
+
+      IF entity-Currency IS INITIAL.
+        APPEND VALUE #( %tky = entity-%tky ) TO failed-limitconf.
+        APPEND VALUE #( %tky = entity-%tky
+          %msg = new_message_with_text(
+            severity = if_abap_behv_message=>severity-error
+            text     = 'Currency is mandatory' )
+          %element-Currency = if_abap_behv=>mk-on
+        ) TO reported-limitconf.
+      ENDIF.
     ENDLOOP.
   ENDMETHOD.
 
 
   METHOD validate_business.
-    READ ENTITIES OF zi_fi_limit_conf IN LOCAL MODE
-      ENTITY LimitConf
-        FIELDS ( Currency )
-        WITH CORRESPONDING #( keys )
-      RESULT DATA(lt_entities).
-
-    LOOP AT lt_entities INTO DATA(entity).
-      IF entity-Currency IS NOT INITIAL
-        AND entity-Currency <> 'VND'
-        AND entity-Currency <> 'USD'
-        AND entity-Currency <> 'EUR'.
-        APPEND VALUE #( %tky = entity-%tky ) TO failed-limitconf.
-        APPEND VALUE #( %tky = entity-%tky
-          %msg = new_message_with_text(
-            severity = if_abap_behv_message=>severity-error
-            text     = 'Currency must be VND, USD or EUR' )
-          %element-Currency = if_abap_behv=>mk-on
-        ) TO reported-limitconf.
-      ENDIF.
-    ENDLOOP.
+    " Duplicate check is handled on the frontend (_validateRows in Main.controller.js)
+    " This app bypasses RAP draft — rows are POST+Activated directly, so ON SAVE never triggers.
   ENDMETHOD.
 
 
@@ -273,7 +283,7 @@ CLASS lhc_LimitConf IMPLEMENTATION.
         changed_at    = lv_now
       ).
 
-            " Lấy dữ liệu CŨ trước khi thay đổi để làm Rollback Snapshot
+      " Lấy dữ liệu CŨ trước khi thay đổi để làm Rollback Snapshot
       DATA ls_old_limit TYPE zfilimitconf.
       CLEAR ls_old_limit.
       IF <req>-ActionType = 'U' OR <req>-ActionType = 'X'.
