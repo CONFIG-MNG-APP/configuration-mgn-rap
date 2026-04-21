@@ -202,33 +202,58 @@ CLASS lhc_priceconf IMPLEMENTATION.
 
       " ── Required fields (CREATE) ─────────────────────────────────────────
       IF entity-ActionType = 'C'.
-        IF entity-ReqId IS INITIAL OR
-           entity-EnvId IS INITIAL OR
-           entity-BranchId IS INITIAL OR
-           entity-CustGroup IS INITIAL.
-
+        IF entity-BranchId IS INITIAL.
           APPEND VALUE #( %tky = entity-%tky ) TO failed-priceconf.
           APPEND VALUE #(
             %tky = entity-%tky
             %msg = new_message_with_text(
                      severity = if_abap_behv_message=>severity-error
-                     text     = 'Mandatory fields missing for CREATE (ReqId/EnvId/BranchId/CustGroup).' )
+                     text     = 'Branch is mandatory' )
+            %element-BranchId = if_abap_behv=>mk-on
+          ) TO reported-priceconf.
+        ENDIF.
+        IF entity-CustGroup IS INITIAL.
+          APPEND VALUE #( %tky = entity-%tky ) TO failed-priceconf.
+          APPEND VALUE #(
+            %tky = entity-%tky
+            %msg = new_message_with_text(
+                     severity = if_abap_behv_message=>severity-error
+                     text     = 'Customer Group is mandatory' )
+            %element-CustGroup = if_abap_behv=>mk-on
+          ) TO reported-priceconf.
+        ENDIF.
+        IF entity-EnvId IS INITIAL.
+          APPEND VALUE #( %tky = entity-%tky ) TO failed-priceconf.
+          APPEND VALUE #(
+            %tky = entity-%tky
+            %msg = new_message_with_text(
+                     severity = if_abap_behv_message=>severity-error
+                     text     = 'Environment ID is mandatory' )
+            %element-EnvId = if_abap_behv=>mk-on
           ) TO reported-priceconf.
         ENDIF.
       ENDIF.
 
       " ── Required fields (UPDATE) ─────────────────────────────────────────
       IF entity-ActionType = 'U'.
-        IF entity-EnvId IS INITIAL OR
-           entity-BranchId IS INITIAL OR
-           entity-CustGroup IS INITIAL.
-
+        IF entity-BranchId IS INITIAL.
           APPEND VALUE #( %tky = entity-%tky ) TO failed-priceconf.
           APPEND VALUE #(
             %tky = entity-%tky
             %msg = new_message_with_text(
                      severity = if_abap_behv_message=>severity-error
-                     text     = 'Mandatory fields missing for UPDATE (EnvId/BranchId/CustGroup).' )
+                     text     = 'Branch is mandatory' )
+            %element-BranchId = if_abap_behv=>mk-on
+          ) TO reported-priceconf.
+        ENDIF.
+        IF entity-CustGroup IS INITIAL.
+          APPEND VALUE #( %tky = entity-%tky ) TO failed-priceconf.
+          APPEND VALUE #(
+            %tky = entity-%tky
+            %msg = new_message_with_text(
+                     severity = if_abap_behv_message=>severity-error
+                     text     = 'Customer Group is mandatory' )
+            %element-CustGroup = if_abap_behv=>mk-on
           ) TO reported-priceconf.
         ENDIF.
       ENDIF.
@@ -307,6 +332,15 @@ CLASS lhc_priceconf IMPLEMENTATION.
           %msg = new_message_with_text(
                    severity = if_abap_behv_message=>severity-error
                    text     = 'Max Discount cannot be negative' )
+          %element-MaxDiscount = if_abap_behv=>mk-on
+        ) TO reported-priceconf.
+      ELSEIF entity-MaxDiscount > 100.
+        APPEND VALUE #( %tky = entity-%tky ) TO failed-priceconf.
+        APPEND VALUE #(
+          %tky = entity-%tky
+          %msg = new_message_with_text(
+                   severity = if_abap_behv_message=>severity-error
+                   text     = 'Max Discount cannot exceed 100%' )
           %element-MaxDiscount = if_abap_behv=>mk-on
         ) TO reported-priceconf.
       ENDIF.

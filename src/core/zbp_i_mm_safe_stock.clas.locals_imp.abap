@@ -13,7 +13,6 @@ ENDCLASS.
 CLASS lhc_safestock IMPLEMENTATION.
 
 
-
   METHOD validateMandatory.
     READ ENTITIES OF zi_mm_safe_stock IN LOCAL MODE
       ENTITY SafeStock
@@ -42,6 +41,20 @@ CLASS lhc_safestock IMPLEMENTATION.
             text     = 'Plant ID is mandatory' )
           %element-PlantId = if_abap_behv=>mk-on
         ) TO reported-safestock.
+      ELSEIF entity-PlantId IS NOT INITIAL.
+        SELECT SINGLE @abap_true FROM zplantunit
+          WHERE plant_id = @entity-PlantId
+          INTO @DATA(lv_plant_exists).
+        IF lv_plant_exists <> abap_true.
+          APPEND VALUE #( %tky = entity-%tky ) TO failed-safestock.
+          APPEND VALUE #(
+            %tky             = entity-%tky
+            %msg             = new_message_with_text(
+              severity = if_abap_behv_message=>severity-error
+              text     = |Plant '{ entity-PlantId }' does not exist| )
+            %element-PlantId = if_abap_behv=>mk-on
+          ) TO reported-safestock.
+        ENDIF.
       ENDIF.
 
       IF entity-MatGroup IS INITIAL.
@@ -55,7 +68,7 @@ CLASS lhc_safestock IMPLEMENTATION.
         ) TO reported-safestock.
       ENDIF.
 
-            " ── Validate MatGroup exists in master data ──────────────────────
+      " ── Validate MatGroup exists in master data ──────────────────────
       IF entity-MatGroup IS NOT INITIAL.
         SELECT SINGLE FROM zsd_matl_grp
           FIELDS @abap_true

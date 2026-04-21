@@ -4,15 +4,13 @@
 @Metadata.ignorePropagatedAnnotations: true
 define root view entity ZI_MM_SAFE_STOCK
   as select from zmmsafestock_req
- association [1..1] to ZI_ENV_DEF as _Env
-  on $projection.EnvId = _Env.EnvId
+  association [1..1] to ZI_ENV_DEF as _Env    on $projection.EnvId = _Env.EnvId
 
-association [1..1] to ZI_ENV_DEF as _OldEnv
-  on $projection.OldEnvId = _OldEnv.EnvId
+  association [1..1] to ZI_ENV_DEF as _OldEnv on $projection.OldEnvId = _OldEnv.EnvId
 {
-  key req_id        as ReqId,
-  key req_item_id   as ReqItemId,
-  key item_id       as ItemId,
+  key req_id         as ReqId,
+  key req_item_id    as ReqItemId,
+  key item_id        as ItemId,
 
       source_item_id as SourceItemId,
       conf_id        as ConfId,
@@ -34,7 +32,7 @@ association [1..1] to ZI_ENV_DEF as _OldEnv
       old_min_qty    as OldMinQty,
       old_version_no as OldVersionNo,
 
-            @Semantics.user.createdBy: true
+      @Semantics.user.createdBy: true
       created_by     as CreatedBy,
 
       @Semantics.systemDateTime.createdAt: true
@@ -50,5 +48,3 @@ association [1..1] to ZI_ENV_DEF as _OldEnv
       _Env,
       _OldEnv
 }
-
-
