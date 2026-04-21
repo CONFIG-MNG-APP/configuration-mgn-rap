@@ -34,16 +34,16 @@ CLASS zcl_gsp26_req_notif_prv IMPLEMENTATION.
     " Đã sửa: Gán vào ES_TYPE_TEXT và bỏ trường LANGUAGE
     CASE iv_type_key.
       WHEN 'REQ_APPROVED'.
-        es_type_text-template_public    = '✅ Phê duyệt: Phiếu cấu hình {ReqTitle} đã được sếp duyệt!'.
-        es_type_text-template_sensitive = '✅ Phê duyệt: Phiếu cấu hình {ReqTitle} đã được sếp duyệt!'.
+        es_type_text-template_public    = ' Phê duyệt: Phiếu cấu hình {ReqTitle} đã được sếp duyệt!'.
+        es_type_text-template_sensitive = ' Phê duyệt: Phiếu cấu hình {ReqTitle} đã được sếp duyệt!'.
 
       WHEN 'REQ_REJECTED'.
-        es_type_text-template_public    = '❌ Từ chối: Phiếu {ReqTitle} của bạn không được duyệt.'.
-        es_type_text-template_sensitive = '❌ Từ chối: Phiếu {ReqTitle} của bạn không được duyệt.'.
+        es_type_text-template_public    = ' Từ chối: Phiếu {ReqTitle} của bạn không được duyệt.'.
+        es_type_text-template_sensitive = ' Từ chối: Phiếu {ReqTitle} của bạn không được duyệt.'.
 
       WHEN 'REQ_SUBMITTED'.
-        es_type_text-template_public    = '⚠️ Chờ duyệt: Có yêu cầu cấu hình mới {ReqTitle}.'.
-        es_type_text-template_sensitive = '⚠️ Chờ duyệt: Có yêu cầu cấu hình mới {ReqTitle}.'.
+        es_type_text-template_public    = ' Chờ duyệt: Có yêu cầu cấu hình mới {ReqTitle}.'.
+        es_type_text-template_sensitive = ' Chờ duyệt: Có yêu cầu cấu hình mới {ReqTitle}.'.
     ENDCASE.
   ENDMETHOD.
 

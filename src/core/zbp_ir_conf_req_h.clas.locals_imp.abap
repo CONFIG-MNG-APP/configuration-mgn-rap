@@ -1377,6 +1377,31 @@
             CONTINUE.
           ENDIF.
 
+          " ── Normalize UUID C36 ──
+          lv_conf_id_c36 = to_upper( ls_key-%param-ConfId ).
+          IF strlen( lv_conf_id_c36 ) = 32.
+            lv_conf_id_c36 = lv_conf_id_c36(8)
+              && '-' && lv_conf_id_c36+8(4)
+              && '-' && lv_conf_id_c36+12(4)
+              && '-' && lv_conf_id_c36+16(4)
+              && '-' && lv_conf_id_c36+20(12).
+          ENDIF.
+
+          " ── Convert UUID C36 → X16 ──
+          lv_uuid_c36 = lv_conf_id_c36.
+          TRY.
+              cl_system_uuid=>convert_uuid_c36_static(
+                EXPORTING uuid     = lv_uuid_c36
+                IMPORTING uuid_x16 = lv_conf_id_x16 ).
+            CATCH cx_uuid_error INTO DATA(lx_uuid).
+              APPEND VALUE #(
+                %msg = new_message_with_text(
+                  severity = if_abap_behv_message=>severity-error
+                  text     = |UUID error: { lx_uuid->get_text( ) }| )
+              ) TO reported-req.
+              CONTINUE.
+          ENDTRY.
+
           " ── Validate catalog is active ──
           SELECT SINGLE is_active, conf_name FROM zconfcatalog
             WHERE conf_id = @lv_conf_id_x16
@@ -1469,6 +1494,7 @@
         ENDLOOP.
 
       ENDMETHOD.
+
 
       METHOD updateReason.
         DATA lv_now TYPE timestampl.

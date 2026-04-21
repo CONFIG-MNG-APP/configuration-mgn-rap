@@ -284,5 +284,3 @@ CLASS zcl_gsp26_rule_snapshot IMPLEMENTATION.
   ENDMETHOD.
 
 ENDCLASS.
-
-
