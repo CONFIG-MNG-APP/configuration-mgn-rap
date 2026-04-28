@@ -23,7 +23,6 @@
   CLASS zcl_gsp26_rule_status IMPLEMENTATION.
 
     METHOD is_transition_valid.
-      " Lấy trạng thái từ DB rồi delegate
       SELECT SINGLE status FROM zconfreqh
         WHERE req_id = @iv_req_id
         INTO @DATA(lv_current_status).

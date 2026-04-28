@@ -67,8 +67,6 @@
           RESULT DATA(lt_reqs).
 
         " 3. Map phân quyền theo role:
-        "    auth-unauthorized → NÚT ẨN HOÀN TOÀN trên UI
-        "    auth-allowed      → nút hiện (visibility do features kiểm soát tiếp)
 
         " Mọi user có bất kỳ role nào đều được submit
         DATA(lv_auth_submit) = COND #(
@@ -119,10 +117,10 @@
           RESULT DATA(lt_reqs).
 
         " 2. Gán Rule Đóng/Mở các action (Enable/Disable nút) tùy thuộc vào Status
+
         LOOP AT lt_reqs INTO DATA(ls_req).
 
-          " Khởi tạo: Mặc định khoá xám xịt (Disabled) toàn bộ các nút
-          " CHÚ Ý CÓ DẤU CÁCH TRƯỚC VÀ SAU DẤU BẰNG
+
           DATA(lv_approve)  = if_abap_behv=>fc-o-disabled.
           DATA(lv_reject)   = if_abap_behv=>fc-o-disabled.
           DATA(lv_submit)   = if_abap_behv=>fc-o-disabled.
@@ -131,7 +129,7 @@
           DATA(lv_update)   = if_abap_behv=>fc-o-disabled.
           DATA(lv_delete)   = if_abap_behv=>fc-o-disabled.
 
-          " Kiểm tra trạng thái hiện tại để mở khoá (Enable) nút tương ứng
+
           CASE condense( ls_req-Status ).
 
             WHEN gc_st_draft OR gc_st_rolled_back.
@@ -152,11 +150,10 @@
               lv_rollback = if_abap_behv=>fc-o-enabled.
 
             WHEN gc_st_rejected.
-              " Trống, mặc định tất cả action đều bị disable (kể cả edit/delete)
 
           ENDCASE.
 
-          " 3. Trả về cho UI5 Fiori kết quả đóng/mở cụ thể
+
           APPEND VALUE #( %tky             = ls_req-%tky
                           %update          = lv_update
                           %delete          = lv_delete
@@ -207,7 +204,7 @@
             APPEND VALUE #( %tky = <r>-%tky ) TO failed-req.
             APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
                              severity = if_abap_behv_message=>severity-error
-                             text = 'Yêu cầu không ở trạng thái chờ duyệt.' ) ) TO reported-req.
+                             text = 'Request is not in pending approval status.' ) ) TO reported-req.
           ENDIF.
 
           " 3. Lọc và Kiểm tra Items
@@ -219,7 +216,7 @@
             APPEND VALUE #( %tky = <r>-%tky ) TO failed-req.
             APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
                              severity = if_abap_behv_message=>severity-error
-                             text = 'Yêu cầu trống, không thể duyệt.' ) ) TO reported-req.
+                             text = 'Request has no items and cannot be approved.' ) ) TO reported-req.
           ENDIF.
 
           IF lv_has_error = abap_true. CONTINUE. ENDIF.
@@ -834,11 +831,10 @@
           TRY.
               /iwngw/cl_notification_api=>create_notifications(
                 EXPORTING
-                  iv_provider_id  = 'ZGSP26SAP06_REQ_NOTIF' " Đúng cái ID bạn vừa Active
+                  iv_provider_id  = 'ZGSP26SAP06_REQ_NOTIF'
                   it_notification = lt_notifications
               ).
             CATCH /iwngw/cx_notification_api INTO DATA(lx_notif_error).
-              " Bắt lỗi ngầm để nếu lỗi Gateway cũng không làm hỏng tiến trình Approve
           ENDTRY.
           " =============================================================
 
@@ -885,7 +881,7 @@
             APPEND VALUE #( %tky = <r>-%tky
                             %msg = new_message_with_text(
                                      severity = if_abap_behv_message=>severity-error
-                                     text     = 'Vui lòng nhập lý do từ chối!' )
+                                     text     = 'Rejection reason is required.' )
                           ) TO reported-req.
           ENDIF.
 
@@ -898,7 +894,7 @@
             APPEND VALUE #( %tky = <r>-%tky
                             %msg = new_message_with_text(
                                      severity = if_abap_behv_message=>severity-error
-                                     text     = |Yêu cầu không ở trạng thái SUBMITTED (Thực tế: '{ lv_current_status }')| )
+                                     text     = |Request is not in SUBMITTED status (Current: '{ lv_current_status }')| )
                           ) TO reported-req.
             CONTINUE.
           ENDIF.
@@ -1074,7 +1070,7 @@
             APPEND VALUE #( %tky = <r>-%tky
               %msg = new_message_with_text(
                 severity = if_abap_behv_message=>severity-error
-                text     = 'Promote chỉ được khi status là Approved hoặc Active' )
+                text     = 'Status must be APPROVED or ACTIVE' )
             ) TO reported-req.
             APPEND VALUE #( %tky = <r>-%tky ) TO failed-req.
             CONTINUE.
@@ -1090,7 +1086,7 @@
             APPEND VALUE #( %tky = <r>-%tky
               %msg = new_message_with_text(
                 severity = if_abap_behv_message=>severity-error
-                text     = 'Request đã ở PRD, không thể promote tiếp.' )
+                text     = 'Request is already at PRD environment, cannot promote further.' )
             ) TO reported-req.
             APPEND VALUE #( %tky = <r>-%tky ) TO failed-req.
             CONTINUE.
@@ -1285,7 +1281,7 @@
               %tky = <r>-%tky
               %msg = new_message_with_text(
                 severity = if_abap_behv_message=>severity-error
-                text     = 'Rollback chi duoc khi status la Approved hoac Active' )
+                text     = 'Rollback is only allowed when status is Approved or Active.' )
             ) TO reported-req.
             APPEND VALUE #( %tky = <r>-%tky ) TO failed-req.
             CONTINUE.

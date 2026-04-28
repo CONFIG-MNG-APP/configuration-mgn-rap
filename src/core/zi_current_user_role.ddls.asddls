@@ -11,10 +11,13 @@ define root view entity ZI_CURRENT_USER_ROLE
       is_active  as IsActive,
       org_access as OrgAccess,
 
-      // Backend tự tính: row này có thuộc về session user không?
-      // Frontend filter bằng IsCurrentUser eq 'X' thay vì cần biết username
+
       cast(
         case when user_id = $session.user then 'X' else ' ' end
         as abap.char( 1 )
       )          as IsCurrentUser
 }
+
+
+      // Backend tự tính: row này có thuộc về session user không?
+      // Frontend filter bằng IsCurrentUser eq 'X' thay vì cần biết username

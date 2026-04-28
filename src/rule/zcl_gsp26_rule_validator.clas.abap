@@ -61,7 +61,6 @@
     ENDMETHOD.
 
     METHOD validate_request_item.
-      " Gộp 2 SELECT thành 1 — tránh N+1 query khi approve nhiều items
       SELECT SINGLE is_active FROM zconfcatalog
         WHERE conf_id = @iv_conf_id
         INTO @DATA(lv_is_active).

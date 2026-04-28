@@ -1,6 +1,6 @@
-@EndUserText.label: 'Lý do từ chối (Manager)'
+@EndUserText.label: 'Reject Reason (Manager)'
 define abstract entity ZABSTR_REJECT_REASON
 {
-  @EndUserText.label: 'Lý do (Reason)'
+  @EndUserText.label: 'Reason'
   reason : abap.string( 256 ); 
 }

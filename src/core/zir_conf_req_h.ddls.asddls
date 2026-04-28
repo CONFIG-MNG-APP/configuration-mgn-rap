@@ -21,10 +21,10 @@ define root view entity ZIR_CONF_REQ_H
       h.description      as Description,
       h.status           as Status,
       case h.status
-        when 'S' then 2 -- Màu vàng: Chờ duyệt (Submitted)
-        when 'A' then 3 -- Màu xanh lá: Đã duyệt (Approved)
-        when 'R' then 1 -- Màu đỏ: Từ chối (Rejected)
-        else 0          -- Không màu/Xám: Nháp (Draft)
+        when 'S' then 2 -- (Submitted)
+        when 'A' then 3 -- (Approved)
+        when 'R' then 1 -- (Rejected)
+        else 0          -- (Draft)
       end                as StatusCriticality,
       h.reason           as Reason,
       h.reject_reason    as RejectReason,
@@ -55,6 +55,8 @@ define root view entity ZIR_CONF_REQ_H
       _Env
 }
 where
-     h.created_by = $session.user -- Key User: chỉ thấy request của mình
-  or r.role_level = 'MANAGER'     -- Manager: thấy tất cả
-  or r.role_level = 'IT ADMIN'    -- IT Admin: thấy tất cả
+     h.created_by = $session.user 
+  or r.role_level = 'MANAGER'     
+  or r.role_level = 'IT ADMIN'    
+
+  

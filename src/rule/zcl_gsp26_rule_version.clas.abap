@@ -9,7 +9,6 @@ ENDCLASS.
 
 CLASS zcl_gsp26_rule_version IMPLEMENTATION.
   METHOD get_next_version.
-    " Lưu ý: Phải đảm bảo iv_table_name là một trong các bảng cấu hình có cột version_no
     SELECT MAX( version_no ) FROM (iv_table_name)
       WHERE item_id = @iv_item_id
       INTO @rv_version.
