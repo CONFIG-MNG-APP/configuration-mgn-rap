@@ -171,7 +171,11 @@ CLASS zcl_gsp26_rule_snapshot IMPLEMENTATION.
            env_id, object_key
       FROM zauditlog
       WHERE req_id = @iv_req_id
-        AND ( action_type = 'PROMOTE' OR action_type = 'APPROVE' )
+        AND ( action_type = 'PROMOTE'
+           OR action_type = 'CREATE'
+           OR action_type = 'UPDATE'
+           OR action_type = 'DELETE' )
+        AND table_name <> 'ZCONFREQH'
       INTO TABLE @DATA(lt_snapshots).
 
     IF lt_snapshots IS INITIAL.
@@ -186,11 +190,24 @@ CLASS zcl_gsp26_rule_snapshot IMPLEMENTATION.
       CASE ls_snap-table_name.
         WHEN 'ZSD_PRICE_CONF'.
           DATA ls_price TYPE zsd_price_conf.
-          IF ls_snap-old_data IS NOT INITIAL.
+          IF ls_snap-old_data IS NOT INITIAL AND ls_snap-old_data <> '{}'.
             /ui2/cl_json=>deserialize( EXPORTING json = ls_snap-old_data CHANGING data = ls_price ).
-            ls_price-item_id = ls_snap-object_key.
-            ls_price-client  = sy-mandt.
-            MODIFY zsd_price_conf FROM @ls_price.
+            IF ls_price-env_id IS NOT INITIAL.
+              " Full row (rollback DELETE): re-insert the deleted row
+              ls_price-item_id = ls_snap-object_key.
+              ls_price-client  = sy-mandt.
+              MODIFY zsd_price_conf FROM @ls_price.
+            ELSE.
+              " Partial data (rollback UPDATE): update only value fields in-place
+              UPDATE zsd_price_conf SET
+                max_discount  = @ls_price-max_discount,
+                min_order_val = @ls_price-min_order_val,
+                approver_grp  = @ls_price-approver_grp,
+                currency      = @ls_price-currency,
+                valid_from    = @ls_price-valid_from,
+                valid_to      = @ls_price-valid_to
+              WHERE item_id = @ls_snap-object_key.
+            ENDIF.
             APPEND VALUE #( success    = abap_true
                             message    = 'SD Price Config restored'
                             table_name = 'ZSD_PRICE_CONF' ) TO rt_results.
@@ -203,11 +220,18 @@ CLASS zcl_gsp26_rule_snapshot IMPLEMENTATION.
 
         WHEN 'ZMMSAFESTOCK'.
           DATA ls_stock TYPE zmmsafestock.
-          IF ls_snap-old_data IS NOT INITIAL.
+          IF ls_snap-old_data IS NOT INITIAL AND ls_snap-old_data <> '{}'.
             /ui2/cl_json=>deserialize( EXPORTING json = ls_snap-old_data CHANGING data = ls_stock ).
-            ls_stock-item_id = ls_snap-object_key.
-            ls_stock-client  = sy-mandt.
-            MODIFY zmmsafestock FROM @ls_stock.
+            IF ls_stock-env_id IS NOT INITIAL.
+              " Full row (rollback DELETE): re-insert the deleted row
+              ls_stock-item_id = ls_snap-object_key.
+              ls_stock-client  = sy-mandt.
+              MODIFY zmmsafestock FROM @ls_stock.
+            ELSE.
+              " Partial data (rollback UPDATE): update only value fields in-place
+              UPDATE zmmsafestock SET min_qty = @ls_stock-min_qty
+                WHERE item_id = @ls_snap-object_key.
+            ENDIF.
             APPEND VALUE #( success    = abap_true
                             message    = 'MM Safe Stock restored'
                             table_name = 'ZMMSAFESTOCK' ) TO rt_results.
@@ -220,11 +244,20 @@ CLASS zcl_gsp26_rule_snapshot IMPLEMENTATION.
 
         WHEN 'ZFILIMITCONF'.
           DATA ls_limit TYPE zfilimitconf.
-          IF ls_snap-old_data IS NOT INITIAL.
+          IF ls_snap-old_data IS NOT INITIAL AND ls_snap-old_data <> '{}'.
             /ui2/cl_json=>deserialize( EXPORTING json = ls_snap-old_data CHANGING data = ls_limit ).
-            ls_limit-item_id = ls_snap-object_key.
-            ls_limit-client  = sy-mandt.
-            MODIFY zfilimitconf FROM @ls_limit.
+            IF ls_limit-env_id IS NOT INITIAL.
+              " Full row (rollback DELETE): re-insert the deleted row
+              ls_limit-item_id = ls_snap-object_key.
+              ls_limit-client  = sy-mandt.
+              MODIFY zfilimitconf FROM @ls_limit.
+            ELSE.
+              " Partial data (rollback UPDATE): update only value fields in-place
+              UPDATE zfilimitconf SET
+                auto_appr_lim = @ls_limit-auto_appr_lim,
+                currency      = @ls_limit-currency
+              WHERE item_id = @ls_snap-object_key.
+            ENDIF.
             APPEND VALUE #( success    = abap_true
                             message    = 'FI Limit restored'
                             table_name = 'ZFILIMITCONF' ) TO rt_results.
@@ -237,11 +270,21 @@ CLASS zcl_gsp26_rule_snapshot IMPLEMENTATION.
 
         WHEN 'ZMMROUTECONF'.
           DATA ls_route TYPE zmmrouteconf.
-          IF ls_snap-old_data IS NOT INITIAL.
+          IF ls_snap-old_data IS NOT INITIAL AND ls_snap-old_data <> '{}'.
             /ui2/cl_json=>deserialize( EXPORTING json = ls_snap-old_data CHANGING data = ls_route ).
-            ls_route-item_id = ls_snap-object_key.
-            ls_route-client  = sy-mandt.
-            MODIFY zmmrouteconf FROM @ls_route.
+            IF ls_route-env_id IS NOT INITIAL.
+              " Full row (rollback DELETE): re-insert the deleted row
+              ls_route-item_id = ls_snap-object_key.
+              ls_route-client  = sy-mandt.
+              MODIFY zmmrouteconf FROM @ls_route.
+            ELSE.
+              " Partial data (rollback UPDATE): update only value fields in-place
+              UPDATE zmmrouteconf SET
+                trans_mode   = @ls_route-trans_mode,
+                is_allowed   = @ls_route-is_allowed,
+                inspector_id = @ls_route-inspector_id
+              WHERE item_id = @ls_snap-object_key.
+            ENDIF.
             APPEND VALUE #( success    = abap_true
                             message    = 'MM Route Config restored'
                             table_name = 'ZMMROUTECONF' ) TO rt_results.
@@ -253,10 +296,7 @@ CLASS zcl_gsp26_rule_snapshot IMPLEMENTATION.
           ENDIF.
 
         WHEN OTHERS.
-          APPEND VALUE #( success    = abap_false
-                          message    = 'Unknown table'
-                          table_name = ls_snap-table_name )
-            TO rt_results.
+          CONTINUE.
       ENDCASE.
 
 
@@ -284,3 +324,4 @@ CLASS zcl_gsp26_rule_snapshot IMPLEMENTATION.
   ENDMETHOD.
 
 ENDCLASS.
+

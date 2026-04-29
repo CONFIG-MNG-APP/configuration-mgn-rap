@@ -506,28 +506,6 @@
             CONTINUE.
           ENDIF.
 
-          " -------------------------------------------------------------
-          " 5. GHI LOG CHO HEADER VÀO INTERNAL TABLE
-          " -------------------------------------------------------------
-          ls_audit_log-client      = sy-mandt.
-          TRY.
-              ls_audit_log-log_id  = cl_system_uuid=>create_uuid_x16_static( ).
-            CATCH cx_uuid_error.
-              " Bỏ qua nếu lỗi sinh UUID
-          ENDTRY.
-          ls_audit_log-req_id      = <r>-ReqId.
-          ls_audit_log-conf_id     = VALUE #( lt_curr_items[ 1 ]-ConfId OPTIONAL ).
-          ls_audit_log-module_id   = <r>-ModuleId.
-          ls_audit_log-action_type = 'APPROVE'.
-          ls_audit_log-table_name  = 'ZCONFREQH'.
-          ls_audit_log-env_id      = lc_env_dev. " Ép môi trường DEV
-          ls_audit_log-old_data    = |\{"REQTITLE":"","STATUS":""\}|.
-          ls_audit_log-new_data    = |\{"REQTITLE":"{ <r>-ReqTitle }","STATUS":"{ gc_st_approved }"\}|.
-          ls_audit_log-changed_by  = sy-uname.
-          ls_audit_log-changed_at  = lv_now.
-          APPEND ls_audit_log TO lt_audit_log.
-          CLEAR ls_audit_log.
-
           " 6. Cập nhật trạng thái APPROVED cho Request Header
           MODIFY ENTITIES OF zir_conf_req_h IN LOCAL MODE
             ENTITY Req UPDATE FIELDS ( Status ApprovedBy ApprovedAt )
@@ -545,14 +523,25 @@
               ls_audit_log-req_id      = <r>-ReqId.
               ls_audit_log-conf_id     = <ss>-conf_id.
               ls_audit_log-module_id   = 'MM'.
-              ls_audit_log-action_type = 'APPROVE'.
               ls_audit_log-table_name  = 'ZMMSAFESTOCK'.
               ls_audit_log-env_id      = lc_env_dev.
               ls_audit_log-object_key  = COND #( WHEN <ss>-action_type = 'C' OR <ss>-action_type = 'CREATE'
                                                  THEN <ss>-item_id
                                                  ELSE <ss>-source_item_id ).
-              ls_audit_log-old_data    = |\{"PLANT_ID":"{ <ss>-old_plant_id }","MAT_GROUP":"{ <ss>-old_mat_group }","MIN_QTY":"{ <ss>-old_min_qty }"\}|.
-              ls_audit_log-new_data    = |\{"PLANT_ID":"{ <ss>-plant_id }","MAT_GROUP":"{ <ss>-mat_group }","MIN_QTY":"{ <ss>-min_qty }"\}|.
+              CASE <ss>-action_type.
+                WHEN 'C' OR 'CREATE'.
+                  ls_audit_log-action_type = 'CREATE'.
+                  ls_audit_log-old_data    = '{}' .
+                  ls_audit_log-new_data    = |\{"PLANT_ID":"{ <ss>-plant_id }","MAT_GROUP":"{ <ss>-mat_group }","MIN_QTY":"{ <ss>-min_qty }"\}|.
+                WHEN 'U' OR 'UPDATE'.
+                  ls_audit_log-action_type = 'UPDATE'.
+                  ls_audit_log-old_data    = |\{"MIN_QTY":"{ <ss>-old_min_qty }"\}|.
+                  ls_audit_log-new_data    = |\{"MIN_QTY":"{ <ss>-min_qty }"\}|.
+                WHEN OTHERS.
+                  ls_audit_log-action_type = 'DELETE'.
+                  ls_audit_log-old_data    = |\{"ENV_ID":"{ lc_env_dev }","PLANT_ID":"{ <ss>-old_plant_id }","MAT_GROUP":"{ <ss>-old_mat_group }","MIN_QTY":"{ <ss>-old_min_qty }"\}|.
+                  ls_audit_log-new_data    = '{}'.
+              ENDCASE.
               ls_audit_log-changed_by  = sy-uname.
               ls_audit_log-changed_at  = lv_now.
               APPEND ls_audit_log TO lt_audit_log.
@@ -612,14 +601,33 @@
               ls_audit_log-req_id      = <r>-ReqId.
               ls_audit_log-conf_id     = <rt>-conf_id.
               ls_audit_log-module_id   = 'MM'.
-              ls_audit_log-action_type = 'APPROVE'.
               ls_audit_log-table_name  = 'ZMMROUTECONF'.
               ls_audit_log-env_id      = lc_env_dev.
               ls_audit_log-object_key  = COND #( WHEN <rt>-action_type = 'C'
                                                  THEN <rt>-item_id
                                                  ELSE <rt>-source_item_id ).
-              ls_audit_log-old_data    = |\{"PLANT_ID":"{ <rt>-old_plant_id }","SEND_WH":"{ <rt>-old_send_wh }","RECEIVE_WH":"{ <rt>-old_receive_wh }","TRANS_MODE":"{ <rt>-old_trans_mode }"\}|.
-              ls_audit_log-new_data    = |\{"PLANT_ID":"{ <rt>-plant_id }","SEND_WH":"{ <rt>-send_wh }","RECEIVE_WH":"{ <rt>-receive_wh }","TRANS_MODE":"{ <rt>-trans_mode }"\}|.
+              CASE <rt>-action_type.
+                WHEN 'C'.
+                  ls_audit_log-action_type = 'CREATE'.
+                  ls_audit_log-old_data    = '{}' .
+                  ls_audit_log-new_data    = |\{"PLANT_ID":"{ <rt>-plant_id }","SEND_WH":"{ <rt>-send_wh }","RECEIVE_WH":"{ <rt>-receive_wh }","TRANS_MODE":"{ <rt>-trans_mode }","IS_ALLOWED":"{ <rt>-is_allowed }"\}|.
+                WHEN 'U'.
+                  ls_audit_log-action_type = 'UPDATE'.
+                  SELECT SINGLE is_allowed, inspector_id FROM zmmrouteconf
+                    WHERE item_id = @<rt>-source_item_id INTO @DATA(ls_rt_cur).
+                  ls_audit_log-old_data = |\{"TRANS_MODE":"{ <rt>-old_trans_mode }","IS_ALLOWED":"{ ls_rt_cur-is_allowed }","INSPECTOR_ID":"{ ls_rt_cur-inspector_id }"\}|.
+                  ls_audit_log-new_data = |\{"TRANS_MODE":"{ <rt>-trans_mode }","IS_ALLOWED":"{ <rt>-is_allowed }","INSPECTOR_ID":"{ <rt>-inspector_id }"\}|.
+                WHEN OTHERS.
+                  ls_audit_log-action_type = 'DELETE'.
+                  SELECT SINGLE is_allowed, inspector_id FROM zmmrouteconf
+                    WHERE item_id = @<rt>-source_item_id INTO @DATA(ls_rt_del_cur).
+                  ls_audit_log-old_data    =
+                    |\{"ENV_ID":"{ lc_env_dev }","PLANT_ID":"{ <rt>-old_plant_id }",| &&
+                    |"SEND_WH":"{ <rt>-old_send_wh }","RECEIVE_WH":"{ <rt>-old_receive_wh }",| &&
+                    |"TRANS_MODE":"{ <rt>-old_trans_mode }","IS_ALLOWED":"{ ls_rt_del_cur-is_allowed }",| &&
+                    |"INSPECTOR_ID":"{ ls_rt_del_cur-inspector_id }"\}|.
+                  ls_audit_log-new_data    = '{}'.
+              ENDCASE.
               ls_audit_log-changed_by  = sy-uname.
               ls_audit_log-changed_at  = lv_now.
               APPEND ls_audit_log TO lt_audit_log.
@@ -673,14 +681,25 @@
               ls_audit_log-req_id      = <r>-ReqId.
               ls_audit_log-conf_id     = <fi>-conf_id.
               ls_audit_log-module_id   = 'FI'.
-              ls_audit_log-action_type = 'APPROVE'.
               ls_audit_log-table_name  = 'ZFILIMITCONF'.
               ls_audit_log-env_id      = lc_env_dev.
               ls_audit_log-object_key  = COND #( WHEN <fi>-action_type = 'C'
                                                  THEN <fi>-item_id
                                                  ELSE <fi>-source_item_id ).
-              ls_audit_log-old_data    = |\{"EXPENSE_TYPE":"{ <fi>-old_expense_type }","GL_ACCOUNT":"{ <fi>-old_gl_account }","AUTO_APPR_LIM":"{ <fi>-old_auto_appr_lim }","CURRENCY":"{ <fi>-old_currency }"\}|.
-              ls_audit_log-new_data    = |\{"EXPENSE_TYPE":"{ <fi>-expense_type }","GL_ACCOUNT":"{ <fi>-gl_account }","AUTO_APPR_LIM":"{ <fi>-auto_appr_lim }","CURRENCY":"{ <fi>-currency }"\}|.
+              CASE <fi>-action_type.
+                WHEN 'C'.
+                  ls_audit_log-action_type = 'CREATE'.
+                  ls_audit_log-old_data    = '{}' .
+                  ls_audit_log-new_data    = |\{"EXPENSE_TYPE":"{ <fi>-expense_type }","GL_ACCOUNT":"{ <fi>-gl_account }","AUTO_APPR_LIM":"{ <fi>-auto_appr_lim }","CURRENCY":"{ <fi>-currency }"\}|.
+                WHEN 'U'.
+                  ls_audit_log-action_type = 'UPDATE'.
+                  ls_audit_log-old_data    = |\{"AUTO_APPR_LIM":"{ <fi>-old_auto_appr_lim }","CURRENCY":"{ <fi>-old_currency }"\}|.
+                  ls_audit_log-new_data    = |\{"AUTO_APPR_LIM":"{ <fi>-auto_appr_lim }","CURRENCY":"{ <fi>-currency }"\}|.
+                WHEN OTHERS.
+                  ls_audit_log-action_type = 'DELETE'.
+                  ls_audit_log-old_data    = |\{"ENV_ID":"{ lc_env_dev }","EXPENSE_TYPE":"{ <fi>-old_expense_type }","GL_ACCOUNT":"{ <fi>-old_gl_account }","AUTO_APPR_LIM":"{ <fi>-old_auto_appr_lim }","CURRENCY":"{ <fi>-old_currency }"\}|.
+                  ls_audit_log-new_data    = '{}'.
+              ENDCASE.
               ls_audit_log-changed_by  = sy-uname.
               ls_audit_log-changed_at  = lv_now.
               APPEND ls_audit_log TO lt_audit_log.
@@ -732,14 +751,45 @@
               ls_audit_log-req_id      = <r>-ReqId.
               ls_audit_log-conf_id     = <sd>-conf_id.
               ls_audit_log-module_id   = 'SD'.
-              ls_audit_log-action_type = 'APPROVE'.
               ls_audit_log-table_name  = 'ZSD_PRICE_CONF'.
               ls_audit_log-env_id      = lc_env_dev.
               ls_audit_log-object_key  = COND #( WHEN <sd>-action_type = 'C'
                                                  THEN <sd>-item_id
                                                  ELSE <sd>-source_item_id ).
-              ls_audit_log-old_data    = |\{"BRANCH_ID":"{ <sd>-old_branch_id }","CUST_GROUP":"{ <sd>-old_cust_group }","MATERIAL_GRP":"{ <sd>-old_material_grp }","MAX_DISCOUNT":"{ <sd>-old_max_discount }","MIN_ORDER_VAL":"{ <sd>-old_min_order_val }"\}|.
-              ls_audit_log-new_data    = |\{"BRANCH_ID":"{ <sd>-branch_id }","CUST_GROUP":"{ <sd>-cust_group }","MATERIAL_GRP":"{ <sd>-material_grp }","MAX_DISCOUNT":"{ <sd>-max_discount }","MIN_ORDER_VAL":"{ <sd>-min_order_val }"\}|.
+              CASE <sd>-action_type.
+                WHEN 'C'.
+                  ls_audit_log-action_type = 'CREATE'.
+                  ls_audit_log-old_data    = '{}'.
+                  ls_audit_log-new_data    =
+                    |\{"BRANCH_ID":"{ <sd>-branch_id }","CUST_GROUP":"{ <sd>-cust_group }",| &&
+                    |"MATERIAL_GRP":"{ <sd>-material_grp }","MAX_DISCOUNT":"{ <sd>-max_discount }",| &&
+                    |"MIN_ORDER_VAL":"{ <sd>-min_order_val }","APPROVER_GRP":"{ <sd>-approver_grp }",| &&
+                    |"CURRENCY":"{ <sd>-currency }","VALID_FROM":"{ <sd>-valid_from }",| &&
+                    |"VALID_TO":"{ <sd>-valid_to }"\}|.
+                WHEN 'U'.
+                  ls_audit_log-action_type = 'UPDATE'.
+                  SELECT SINGLE approver_grp, currency, valid_from, valid_to FROM zsd_price_conf
+                    WHERE item_id = @<sd>-source_item_id INTO @DATA(ls_sd_cur).
+                  ls_audit_log-old_data =
+                    |\{"MAX_DISCOUNT":"{ <sd>-old_max_discount }","MIN_ORDER_VAL":"{ <sd>-old_min_order_val }",| &&
+                    |"APPROVER_GRP":"{ ls_sd_cur-approver_grp }","CURRENCY":"{ ls_sd_cur-currency }",| &&
+                    |"VALID_FROM":"{ ls_sd_cur-valid_from }","VALID_TO":"{ ls_sd_cur-valid_to }"\}|.
+                  ls_audit_log-new_data =
+                    |\{"MAX_DISCOUNT":"{ <sd>-max_discount }","MIN_ORDER_VAL":"{ <sd>-min_order_val }",| &&
+                    |"APPROVER_GRP":"{ <sd>-approver_grp }","CURRENCY":"{ <sd>-currency }",| &&
+                    |"VALID_FROM":"{ <sd>-valid_from }","VALID_TO":"{ <sd>-valid_to }"\}|.
+                WHEN OTHERS.
+                  ls_audit_log-action_type = 'DELETE'.
+                  SELECT SINGLE approver_grp, currency, valid_from, valid_to FROM zsd_price_conf
+                    WHERE item_id = @<sd>-source_item_id INTO @DATA(ls_sd_del_cur).
+                  ls_audit_log-old_data    =
+                    |\{"ENV_ID":"{ lc_env_dev }","BRANCH_ID":"{ <sd>-old_branch_id }","CUST_GROUP":"{ <sd>-old_cust_group }",| &&
+                    |"MATERIAL_GRP":"{ <sd>-old_material_grp }","MAX_DISCOUNT":"{ <sd>-old_max_discount }",| &&
+                    |"MIN_ORDER_VAL":"{ <sd>-old_min_order_val }","APPROVER_GRP":"{ ls_sd_del_cur-approver_grp }",| &&
+                    |"CURRENCY":"{ ls_sd_del_cur-currency }","VALID_FROM":"{ ls_sd_del_cur-valid_from }",| &&
+                    |"VALID_TO":"{ ls_sd_del_cur-valid_to }"\}|.
+                  ls_audit_log-new_data    = '{}'.
+              ENDCASE.
               ls_audit_log-changed_by  = sy-uname.
               ls_audit_log-changed_at  = lv_now.
               APPEND ls_audit_log TO lt_audit_log.
@@ -1058,6 +1108,12 @@
         DATA lv_ver_rt TYPE i.
         DATA lv_ver_fi TYPE i.
         DATA lv_ver_sd TYPE i.
+        DATA lt_promo_log TYPE STANDARD TABLE OF zauditlog WITH EMPTY KEY.
+        DATA ls_promo_log TYPE zauditlog.
+        DATA lv_ss_new_id TYPE sysuuid_x16.
+        DATA lv_rt_new_id TYPE sysuuid_x16.
+        DATA lv_fi_new_id TYPE sysuuid_x16.
+        DATA lv_sd_new_id TYPE sysuuid_x16.
 
         READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
           ENTITY Req ALL FIELDS WITH CORRESPONDING #( keys )
@@ -1118,13 +1174,13 @@
             INTO TABLE @DATA(lt_ss).
           LOOP AT lt_ss ASSIGNING FIELD-SYMBOL(<ss>).
             DATA lv_ss_target_id TYPE sysuuid_x16.
-            SELECT SINGLE item_id FROM zmmsafestock
+            SELECT SINGLE item_id, min_qty FROM zmmsafestock
               WHERE env_id   = @lv_next_env
                 AND plant_id = @<ss>-plant_id
                 AND mat_group = @<ss>-mat_group
-              INTO @lv_ss_target_id.
+              INTO @DATA(ls_ss_tgt).
             IF sy-subrc = 0.
-              " COND not allowed in UPDATE SET — compute version into a variable first
+              lv_ss_target_id = ls_ss_tgt-item_id.
               lv_ver_new = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_ss ELSE <ss>-version_no ).
               UPDATE zmmsafestock SET
                 min_qty    = @<ss>-min_qty,
@@ -1133,8 +1189,87 @@
                 changed_by = @sy-uname,
                 changed_at = @lv_now
               WHERE item_id = @lv_ss_target_id.
+              TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
+              ls_promo_log-client      = sy-mandt.
+              ls_promo_log-req_id      = <r>-ReqId.
+              ls_promo_log-conf_id     = <r>-ConfId.
+              ls_promo_log-module_id   = 'MM'.
+              ls_promo_log-action_type = 'PROMOTE'.
+              ls_promo_log-table_name  = 'ZMMSAFESTOCK'.
+              ls_promo_log-env_id      = lv_next_env.
+              ls_promo_log-object_key  = lv_ss_target_id.
+              ls_promo_log-old_data    = |\{"MIN_QTY":"{ ls_ss_tgt-min_qty }"\}|.
+              ls_promo_log-new_data    = |\{"MIN_QTY":"{ <ss>-min_qty }"\}|.
+              ls_promo_log-changed_by  = sy-uname.
+              ls_promo_log-changed_at  = lv_now.
+              APPEND ls_promo_log TO lt_promo_log.
+              CLEAR ls_promo_log.
+            ELSE.
+              " CREATE propagation: row not in target env yet → INSERT
+              TRY. lv_ss_new_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
+              lv_ver_new = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_ss ELSE <ss>-version_no ).
+              INSERT zmmsafestock FROM @( VALUE zmmsafestock(
+                client     = sy-mandt
+                item_id    = lv_ss_new_id
+                req_id     = <r>-ReqId
+                env_id     = lv_next_env
+                plant_id   = <ss>-plant_id
+                mat_group  = <ss>-mat_group
+                min_qty    = <ss>-min_qty
+                version_no = lv_ver_new
+                created_at = lv_now
+                changed_by = sy-uname
+                changed_at = lv_now ) ).
+              TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
+              ls_promo_log-client      = sy-mandt.
+              ls_promo_log-req_id      = <r>-ReqId.
+              ls_promo_log-conf_id     = <r>-ConfId.
+              ls_promo_log-module_id   = 'MM'.
+              ls_promo_log-action_type = 'PROMOTE'.
+              ls_promo_log-table_name  = 'ZMMSAFESTOCK'.
+              ls_promo_log-env_id      = lv_next_env.
+              ls_promo_log-object_key  = lv_ss_new_id.
+              ls_promo_log-old_data    = '{}'.
+              ls_promo_log-new_data    = |\{"PLANT_ID":"{ <ss>-plant_id }","MAT_GROUP":"{ <ss>-mat_group }","MIN_QTY":"{ <ss>-min_qty }"\}|.
+              ls_promo_log-changed_by  = sy-uname.
+              ls_promo_log-changed_at  = lv_now.
+              APPEND ls_promo_log TO lt_promo_log.
+              CLEAR ls_promo_log.
             ENDIF.
             CLEAR lv_ss_target_id.
+          ENDLOOP.
+
+          " ── MM SafeStock: DELETE target-env rows for DELETE action ──
+          SELECT * FROM zmmsafestock_req
+            WHERE req_id = @<r>-ReqId
+              AND ( action_type = 'X' OR action_type = 'DELETE' )
+            INTO TABLE @DATA(lt_ss_del).
+          LOOP AT lt_ss_del ASSIGNING FIELD-SYMBOL(<ss_d>).
+            SELECT SINGLE item_id, min_qty FROM zmmsafestock
+              WHERE env_id    = @lv_next_env
+                AND plant_id  = @<ss_d>-old_plant_id
+                AND mat_group = @<ss_d>-old_mat_group
+              INTO @DATA(ls_ss_del_tgt).
+            IF sy-subrc = 0.
+              DELETE FROM zmmsafestock WHERE item_id = @ls_ss_del_tgt-item_id.
+              IF sy-dbcnt > 0.
+                TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
+                ls_promo_log-client      = sy-mandt.
+                ls_promo_log-req_id      = <r>-ReqId.
+                ls_promo_log-conf_id     = <r>-ConfId.
+                ls_promo_log-module_id   = 'MM'.
+                ls_promo_log-action_type = 'PROMOTE'.
+                ls_promo_log-table_name  = 'ZMMSAFESTOCK'.
+                ls_promo_log-env_id      = lv_next_env.
+                ls_promo_log-object_key  = ls_ss_del_tgt-item_id.
+                ls_promo_log-old_data    = |\{"ENV_ID":"{ lv_next_env }","PLANT_ID":"{ <ss_d>-old_plant_id }","MAT_GROUP":"{ <ss_d>-old_mat_group }","MIN_QTY":"{ ls_ss_del_tgt-min_qty }"\}|.
+                ls_promo_log-new_data    = '{}'.
+                ls_promo_log-changed_by  = sy-uname.
+                ls_promo_log-changed_at  = lv_now.
+                APPEND ls_promo_log TO lt_promo_log.
+                CLEAR ls_promo_log.
+              ENDIF.
+            ENDIF.
           ENDLOOP.
 
           " ── MM Route: UPDATE the existing target-env row (same business key) ──
@@ -1143,13 +1278,14 @@
             INTO TABLE @DATA(lt_rt).
           LOOP AT lt_rt ASSIGNING FIELD-SYMBOL(<rt>).
             DATA lv_rt_target_id TYPE sysuuid_x16.
-            SELECT SINGLE item_id FROM zmmrouteconf
+            SELECT SINGLE item_id, trans_mode, is_allowed, inspector_id FROM zmmrouteconf
               WHERE env_id     = @lv_next_env
                 AND plant_id   = @<rt>-plant_id
                 AND send_wh    = @<rt>-send_wh
                 AND receive_wh = @<rt>-receive_wh
-              INTO @lv_rt_target_id.
+              INTO @DATA(ls_rt_tgt).
             IF sy-subrc = 0.
+              lv_rt_target_id = ls_rt_tgt-item_id.
               lv_ver_new = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_rt ELSE <rt>-version_no ).
               UPDATE zmmrouteconf SET
                 inspector_id = @<rt>-inspector_id,
@@ -1160,8 +1296,94 @@
                 changed_by   = @sy-uname,
                 changed_at   = @lv_now
               WHERE item_id = @lv_rt_target_id.
+              TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
+              ls_promo_log-client      = sy-mandt.
+              ls_promo_log-req_id      = <r>-ReqId.
+              ls_promo_log-conf_id     = <r>-ConfId.
+              ls_promo_log-module_id   = 'MM'.
+              ls_promo_log-action_type = 'PROMOTE'.
+              ls_promo_log-table_name  = 'ZMMROUTECONF'.
+              ls_promo_log-env_id      = lv_next_env.
+              ls_promo_log-object_key  = lv_rt_target_id.
+              ls_promo_log-old_data    = |\{"TRANS_MODE":"{ ls_rt_tgt-trans_mode }","IS_ALLOWED":"{ ls_rt_tgt-is_allowed }","INSPECTOR_ID":"{ ls_rt_tgt-inspector_id }"\}|.
+              ls_promo_log-new_data    = |\{"TRANS_MODE":"{ <rt>-trans_mode }","IS_ALLOWED":"{ <rt>-is_allowed }","INSPECTOR_ID":"{ <rt>-inspector_id }"\}|.
+              ls_promo_log-changed_by  = sy-uname.
+              ls_promo_log-changed_at  = lv_now.
+              APPEND ls_promo_log TO lt_promo_log.
+              CLEAR ls_promo_log.
+            ELSE.
+              " CREATE propagation: route not in target env yet → INSERT
+              TRY. lv_rt_new_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
+              lv_ver_new = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_rt ELSE <rt>-version_no ).
+              INSERT zmmrouteconf FROM @( VALUE zmmrouteconf(
+                client       = sy-mandt
+                item_id      = lv_rt_new_id
+                req_id       = <r>-ReqId
+                env_id       = lv_next_env
+                plant_id     = <rt>-plant_id
+                send_wh      = <rt>-send_wh
+                receive_wh   = <rt>-receive_wh
+                trans_mode   = <rt>-trans_mode
+                is_allowed   = <rt>-is_allowed
+                inspector_id = <rt>-inspector_id
+                version_no   = lv_ver_new
+                created_at   = lv_now
+                changed_by   = sy-uname
+                changed_at   = lv_now ) ).
+              TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
+              ls_promo_log-client      = sy-mandt.
+              ls_promo_log-req_id      = <r>-ReqId.
+              ls_promo_log-conf_id     = <r>-ConfId.
+              ls_promo_log-module_id   = 'MM'.
+              ls_promo_log-action_type = 'PROMOTE'.
+              ls_promo_log-table_name  = 'ZMMROUTECONF'.
+              ls_promo_log-env_id      = lv_next_env.
+              ls_promo_log-object_key  = lv_rt_new_id.
+              ls_promo_log-old_data    = '{}'.
+              ls_promo_log-new_data    = |\{"PLANT_ID":"{ <rt>-plant_id }","SEND_WH":"{ <rt>-send_wh }","RECEIVE_WH":"{ <rt>-receive_wh }","TRANS_MODE":"{ <rt>-trans_mode }","IS_ALLOWED":"{ <rt>-is_allowed }"\}|.
+              ls_promo_log-changed_by  = sy-uname.
+              ls_promo_log-changed_at  = lv_now.
+              APPEND ls_promo_log TO lt_promo_log.
+              CLEAR ls_promo_log.
             ENDIF.
             CLEAR lv_rt_target_id.
+          ENDLOOP.
+
+          " ── MM Route: DELETE target-env rows for DELETE action ──
+          SELECT * FROM zmmrouteconf_req
+            WHERE req_id = @<r>-ReqId AND action_type = 'X'
+            INTO TABLE @DATA(lt_rt_del).
+          LOOP AT lt_rt_del ASSIGNING FIELD-SYMBOL(<rt_d>).
+            SELECT SINGLE item_id, trans_mode, is_allowed, inspector_id FROM zmmrouteconf
+              WHERE env_id     = @lv_next_env
+                AND plant_id   = @<rt_d>-old_plant_id
+                AND send_wh    = @<rt_d>-old_send_wh
+                AND receive_wh = @<rt_d>-old_receive_wh
+              INTO @DATA(ls_rt_del_tgt).
+            IF sy-subrc = 0.
+              DELETE FROM zmmrouteconf WHERE item_id = @ls_rt_del_tgt-item_id.
+              IF sy-dbcnt > 0.
+                TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
+                ls_promo_log-client      = sy-mandt.
+                ls_promo_log-req_id      = <r>-ReqId.
+                ls_promo_log-conf_id     = <r>-ConfId.
+                ls_promo_log-module_id   = 'MM'.
+                ls_promo_log-action_type = 'PROMOTE'.
+                ls_promo_log-table_name  = 'ZMMROUTECONF'.
+                ls_promo_log-env_id      = lv_next_env.
+                ls_promo_log-object_key  = ls_rt_del_tgt-item_id.
+                ls_promo_log-old_data    =
+                  |\{"ENV_ID":"{ lv_next_env }","PLANT_ID":"{ <rt_d>-old_plant_id }",| &&
+                  |"SEND_WH":"{ <rt_d>-old_send_wh }","RECEIVE_WH":"{ <rt_d>-old_receive_wh }",| &&
+                  |"TRANS_MODE":"{ ls_rt_del_tgt-trans_mode }","IS_ALLOWED":"{ ls_rt_del_tgt-is_allowed }",| &&
+                  |"INSPECTOR_ID":"{ ls_rt_del_tgt-inspector_id }"\}|.
+                ls_promo_log-new_data    = '{}'.
+                ls_promo_log-changed_by  = sy-uname.
+                ls_promo_log-changed_at  = lv_now.
+                APPEND ls_promo_log TO lt_promo_log.
+                CLEAR ls_promo_log.
+              ENDIF.
+            ENDIF.
           ENDLOOP.
 
           " ── FI Limit: UPDATE the existing target-env row (same business key) ──
@@ -1170,12 +1392,13 @@
             INTO TABLE @DATA(lt_fi).
           LOOP AT lt_fi ASSIGNING FIELD-SYMBOL(<fi>).
             DATA lv_fi_target_id TYPE sysuuid_x16.
-            SELECT SINGLE item_id FROM zfilimitconf
+            SELECT SINGLE item_id, auto_appr_lim, currency FROM zfilimitconf
               WHERE env_id       = @lv_next_env
                 AND expense_type = @<fi>-expense_type
                 AND gl_account   = @<fi>-gl_account
-              INTO @lv_fi_target_id.
+              INTO @DATA(ls_fi_tgt).
             IF sy-subrc = 0.
+              lv_fi_target_id = ls_fi_tgt-item_id.
               lv_ver_new = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_fi ELSE <fi>-version_no ).
               UPDATE zfilimitconf SET
                 auto_appr_lim = @<fi>-auto_appr_lim,
@@ -1185,8 +1408,90 @@
                 changed_by    = @sy-uname,
                 changed_at    = @lv_now
               WHERE item_id = @lv_fi_target_id.
+              TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
+              ls_promo_log-client      = sy-mandt.
+              ls_promo_log-req_id      = <r>-ReqId.
+              ls_promo_log-conf_id     = <r>-ConfId.
+              ls_promo_log-module_id   = 'FI'.
+              ls_promo_log-action_type = 'PROMOTE'.
+              ls_promo_log-table_name  = 'ZFILIMITCONF'.
+              ls_promo_log-env_id      = lv_next_env.
+              ls_promo_log-object_key  = lv_fi_target_id.
+              ls_promo_log-old_data    = |\{"AUTO_APPR_LIM":"{ ls_fi_tgt-auto_appr_lim }","CURRENCY":"{ ls_fi_tgt-currency }"\}|.
+              ls_promo_log-new_data    = |\{"AUTO_APPR_LIM":"{ <fi>-auto_appr_lim }","CURRENCY":"{ <fi>-currency }"\}|.
+              ls_promo_log-changed_by  = sy-uname.
+              ls_promo_log-changed_at  = lv_now.
+              APPEND ls_promo_log TO lt_promo_log.
+              CLEAR ls_promo_log.
+            ELSE.
+              " CREATE propagation: limit not in target env yet → INSERT
+              TRY. lv_fi_new_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
+              lv_ver_new = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_fi ELSE <fi>-version_no ).
+              INSERT zfilimitconf FROM @( VALUE zfilimitconf(
+                client        = sy-mandt
+                item_id       = lv_fi_new_id
+                req_id        = <r>-ReqId
+                env_id        = lv_next_env
+                expense_type  = <fi>-expense_type
+                gl_account    = <fi>-gl_account
+                auto_appr_lim = <fi>-auto_appr_lim
+                currency      = <fi>-currency
+                version_no    = lv_ver_new
+                created_at    = lv_now
+                changed_by    = sy-uname
+                changed_at    = lv_now ) ).
+              TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
+              ls_promo_log-client      = sy-mandt.
+              ls_promo_log-req_id      = <r>-ReqId.
+              ls_promo_log-conf_id     = <r>-ConfId.
+              ls_promo_log-module_id   = 'FI'.
+              ls_promo_log-action_type = 'PROMOTE'.
+              ls_promo_log-table_name  = 'ZFILIMITCONF'.
+              ls_promo_log-env_id      = lv_next_env.
+              ls_promo_log-object_key  = lv_fi_new_id.
+              ls_promo_log-old_data    = '{}'.
+              ls_promo_log-new_data    = |\{"EXPENSE_TYPE":"{ <fi>-expense_type }","GL_ACCOUNT":"{ <fi>-gl_account }","AUTO_APPR_LIM":"{ <fi>-auto_appr_lim }","CURRENCY":"{ <fi>-currency }"\}|.
+              ls_promo_log-changed_by  = sy-uname.
+              ls_promo_log-changed_at  = lv_now.
+              APPEND ls_promo_log TO lt_promo_log.
+              CLEAR ls_promo_log.
             ENDIF.
             CLEAR lv_fi_target_id.
+          ENDLOOP.
+
+          " ── FI Limit: DELETE target-env rows for DELETE action ──
+          SELECT * FROM zfilimitreq
+            WHERE req_id = @<r>-ReqId AND action_type = 'X'
+            INTO TABLE @DATA(lt_fi_del).
+          LOOP AT lt_fi_del ASSIGNING FIELD-SYMBOL(<fi_d>).
+            SELECT SINGLE item_id, auto_appr_lim, currency FROM zfilimitconf
+              WHERE env_id       = @lv_next_env
+                AND expense_type = @<fi_d>-old_expense_type
+                AND gl_account   = @<fi_d>-old_gl_account
+              INTO @DATA(ls_fi_del_tgt).
+            IF sy-subrc = 0.
+              DELETE FROM zfilimitconf WHERE item_id = @ls_fi_del_tgt-item_id.
+              IF sy-dbcnt > 0.
+                TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
+                ls_promo_log-client      = sy-mandt.
+                ls_promo_log-req_id      = <r>-ReqId.
+                ls_promo_log-conf_id     = <r>-ConfId.
+                ls_promo_log-module_id   = 'FI'.
+                ls_promo_log-action_type = 'PROMOTE'.
+                ls_promo_log-table_name  = 'ZFILIMITCONF'.
+                ls_promo_log-env_id      = lv_next_env.
+                ls_promo_log-object_key  = ls_fi_del_tgt-item_id.
+                ls_promo_log-old_data    =
+                  |\{"ENV_ID":"{ lv_next_env }","EXPENSE_TYPE":"{ <fi_d>-old_expense_type }",| &&
+                  |"GL_ACCOUNT":"{ <fi_d>-old_gl_account }","AUTO_APPR_LIM":"{ ls_fi_del_tgt-auto_appr_lim }",| &&
+                  |"CURRENCY":"{ ls_fi_del_tgt-currency }"\}|.
+                ls_promo_log-new_data    = '{}'.
+                ls_promo_log-changed_by  = sy-uname.
+                ls_promo_log-changed_at  = lv_now.
+                APPEND ls_promo_log TO lt_promo_log.
+                CLEAR ls_promo_log.
+              ENDIF.
+            ENDIF.
           ENDLOOP.
 
           " ── SD Price: UPDATE the existing target-env row (same business key) ──
@@ -1195,13 +1500,15 @@
             INTO TABLE @DATA(lt_sd).
           LOOP AT lt_sd ASSIGNING FIELD-SYMBOL(<sd>).
             DATA lv_sd_target_id TYPE sysuuid_x16.
-            SELECT SINGLE item_id FROM zsd_price_conf
-              WHERE env_id      = @lv_next_env
-                AND branch_id   = @<sd>-branch_id
-                AND cust_group  = @<sd>-cust_group
+            SELECT SINGLE item_id, max_discount, min_order_val, approver_grp, currency, valid_from, valid_to
+              FROM zsd_price_conf
+              WHERE env_id       = @lv_next_env
+                AND branch_id    = @<sd>-branch_id
+                AND cust_group   = @<sd>-cust_group
                 AND material_grp = @<sd>-material_grp
-              INTO @lv_sd_target_id.
+              INTO @DATA(ls_sd_tgt).
             IF sy-subrc = 0.
+              lv_sd_target_id = ls_sd_tgt-item_id.
               lv_ver_new = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_sd ELSE <sd>-version_no ).
               UPDATE zsd_price_conf SET
                 max_discount  = @<sd>-max_discount,
@@ -1215,33 +1522,111 @@
                 changed_by    = @sy-uname,
                 changed_at    = @lv_now
               WHERE item_id = @lv_sd_target_id.
+              TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
+              ls_promo_log-client      = sy-mandt.
+              ls_promo_log-req_id      = <r>-ReqId.
+              ls_promo_log-conf_id     = <r>-ConfId.
+              ls_promo_log-module_id   = 'SD'.
+              ls_promo_log-action_type = 'PROMOTE'.
+              ls_promo_log-table_name  = 'ZSD_PRICE_CONF'.
+              ls_promo_log-env_id      = lv_next_env.
+              ls_promo_log-object_key  = lv_sd_target_id.
+              ls_promo_log-old_data    =
+                |\{"MAX_DISCOUNT":"{ ls_sd_tgt-max_discount }","MIN_ORDER_VAL":"{ ls_sd_tgt-min_order_val }",| &&
+                |"APPROVER_GRP":"{ ls_sd_tgt-approver_grp }","CURRENCY":"{ ls_sd_tgt-currency }",| &&
+                |"VALID_FROM":"{ ls_sd_tgt-valid_from }","VALID_TO":"{ ls_sd_tgt-valid_to }"\}|.
+              ls_promo_log-new_data    =
+                |\{"MAX_DISCOUNT":"{ <sd>-max_discount }","MIN_ORDER_VAL":"{ <sd>-min_order_val }",| &&
+                |"APPROVER_GRP":"{ <sd>-approver_grp }","CURRENCY":"{ <sd>-currency }",| &&
+                |"VALID_FROM":"{ <sd>-valid_from }","VALID_TO":"{ <sd>-valid_to }"\}|.
+              ls_promo_log-changed_by  = sy-uname.
+              ls_promo_log-changed_at  = lv_now.
+              APPEND ls_promo_log TO lt_promo_log.
+              CLEAR ls_promo_log.
+            ELSE.
+              " CREATE propagation: price rule not in target env yet → INSERT
+              TRY. lv_sd_new_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
+              lv_ver_new = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_sd ELSE <sd>-version_no ).
+              INSERT zsd_price_conf FROM @( VALUE zsd_price_conf(
+                client        = sy-mandt
+                item_id       = lv_sd_new_id
+                req_id        = <r>-ReqId
+                env_id        = lv_next_env
+                branch_id     = <sd>-branch_id
+                cust_group    = <sd>-cust_group
+                material_grp  = <sd>-material_grp
+                max_discount  = <sd>-max_discount
+                min_order_val = <sd>-min_order_val
+                approver_grp  = <sd>-approver_grp
+                currency      = <sd>-currency
+                valid_from    = <sd>-valid_from
+                valid_to      = <sd>-valid_to
+                version_no    = lv_ver_new
+                created_at    = lv_now
+                changed_by    = sy-uname
+                changed_at    = lv_now ) ).
+              TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
+              ls_promo_log-client      = sy-mandt.
+              ls_promo_log-req_id      = <r>-ReqId.
+              ls_promo_log-conf_id     = <r>-ConfId.
+              ls_promo_log-module_id   = 'SD'.
+              ls_promo_log-action_type = 'PROMOTE'.
+              ls_promo_log-table_name  = 'ZSD_PRICE_CONF'.
+              ls_promo_log-env_id      = lv_next_env.
+              ls_promo_log-object_key  = lv_sd_new_id.
+              ls_promo_log-old_data    = '{}'.
+              ls_promo_log-new_data    =
+                |\{"BRANCH_ID":"{ <sd>-branch_id }","CUST_GROUP":"{ <sd>-cust_group }",| &&
+                |"MATERIAL_GRP":"{ <sd>-material_grp }","MAX_DISCOUNT":"{ <sd>-max_discount }",| &&
+                |"MIN_ORDER_VAL":"{ <sd>-min_order_val }","APPROVER_GRP":"{ <sd>-approver_grp }",| &&
+                |"CURRENCY":"{ <sd>-currency }","VALID_FROM":"{ <sd>-valid_from }",| &&
+                |"VALID_TO":"{ <sd>-valid_to }"\}|.
+              ls_promo_log-changed_by  = sy-uname.
+              ls_promo_log-changed_at  = lv_now.
+              APPEND ls_promo_log TO lt_promo_log.
+              CLEAR ls_promo_log.
             ENDIF.
             CLEAR lv_sd_target_id.
           ENDLOOP.
 
-          " ── Audit log ──
-          TRY.
-              DATA(ls_new_hdr) = VALUE zconfreqh(
-                req_id      = <r>-ReqId
-                env_id      = lv_next_env
-                status      = gc_st_active
-                module_id   = <r>-ModuleId
-                req_title   = <r>-ReqTitle ).
-
-              zcl_gsp26_rule_writer=>log_audit_entry(
-                iv_conf_id  = <r>-ConfId
-                iv_req_id   = <r>-ReqId
-                iv_mod_id   = <r>-ModuleId
-                iv_act_type = 'PROMOTE'
-                iv_tab_name = 'ZCONFREQH'
-                iv_env_id   = lv_next_env
-                is_new_data = VALUE #( BASE <r> Status = gc_st_active
-                                       EnvId  = lv_next_env ) ).
-            CATCH cx_root INTO DATA(lx_audit).
-              APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                severity = if_abap_behv_message=>severity-warning
-                text = |Audit log skipped: { lx_audit->get_text( ) }| ) ) TO reported-req.
-          ENDTRY.
+          " ── SD Price: DELETE target-env rows for DELETE action ──
+          SELECT * FROM zsd_price_req
+            WHERE req_id = @<r>-ReqId AND action_type = 'X'
+            INTO TABLE @DATA(lt_sd_del).
+          LOOP AT lt_sd_del ASSIGNING FIELD-SYMBOL(<sd_d>).
+            SELECT SINGLE item_id, max_discount, min_order_val, approver_grp, currency, valid_from, valid_to
+              FROM zsd_price_conf
+              WHERE env_id       = @lv_next_env
+                AND branch_id    = @<sd_d>-old_branch_id
+                AND cust_group   = @<sd_d>-old_cust_group
+                AND material_grp = @<sd_d>-old_material_grp
+              INTO @DATA(ls_sd_del_tgt).
+            IF sy-subrc = 0.
+              DELETE FROM zsd_price_conf WHERE item_id = @ls_sd_del_tgt-item_id.
+              IF sy-dbcnt > 0.
+                TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
+                ls_promo_log-client      = sy-mandt.
+                ls_promo_log-req_id      = <r>-ReqId.
+                ls_promo_log-conf_id     = <r>-ConfId.
+                ls_promo_log-module_id   = 'SD'.
+                ls_promo_log-action_type = 'PROMOTE'.
+                ls_promo_log-table_name  = 'ZSD_PRICE_CONF'.
+                ls_promo_log-env_id      = lv_next_env.
+                ls_promo_log-object_key  = ls_sd_del_tgt-item_id.
+                ls_promo_log-old_data    =
+                  |\{"ENV_ID":"{ lv_next_env }","BRANCH_ID":"{ <sd_d>-old_branch_id }",| &&
+                  |"CUST_GROUP":"{ <sd_d>-old_cust_group }","MATERIAL_GRP":"{ <sd_d>-old_material_grp }",| &&
+                  |"MAX_DISCOUNT":"{ ls_sd_del_tgt-max_discount }","MIN_ORDER_VAL":"{ ls_sd_del_tgt-min_order_val }",| &&
+                  |"APPROVER_GRP":"{ ls_sd_del_tgt-approver_grp }","CURRENCY":"{ ls_sd_del_tgt-currency }",| &&
+                  |"VALID_FROM":"{ ls_sd_del_tgt-valid_from }","VALID_TO":"{ ls_sd_del_tgt-valid_to }"\}|.
+                ls_promo_log-new_data    = '{}'.
+                ls_promo_log-changed_by  = sy-uname.
+                ls_promo_log-changed_at  = lv_now.
+                APPEND ls_promo_log TO lt_promo_log.
+                CLEAR ls_promo_log.
+              ENDIF.
+            ENDIF.
+          ENDLOOP.
 
           " ── Update request header: move env_id to next env ──
           " EnvId is a RAP key field — cannot change via MODIFY ENTITIES UPDATE.
@@ -1261,6 +1646,10 @@
               AND env_id  = @<r>-EnvId.
 
         ENDLOOP.
+
+        IF lt_promo_log IS NOT INITIAL.
+          INSERT zauditlog FROM TABLE @lt_promo_log.
+        ENDIF.
 
         result = VALUE #( FOR r IN reqs ( %tky = r-%tky ) ).
       ENDMETHOD.
@@ -1328,14 +1717,16 @@
                 text = |Audit log failed: { lx_audit_rb->get_text( ) }| ) ) TO reported-req.
           ENDTRY.
 
-          MODIFY ENTITIES OF zir_conf_req_h IN LOCAL MODE
-            ENTITY Req UPDATE FIELDS ( Status ChangedBy ChangedAt )
-            WITH VALUE #( (
-              %tky      = <r>-%tky
-              Status    = gc_st_rolled_back
-              ChangedBy = sy-uname
-              ChangedAt = lv_now
-            ) ).
+          " Use direct SQL like promote() — avoids RAP buffer/DB key conflict when env_id changes.
+          " restore_from_snapshot() reverts ALL environments at once, so env_id resets to DEV.
+          UPDATE zconfreqh
+            SET env_id     = 'DEV',
+                status     = @gc_st_rolled_back,
+                changed_by = @sy-uname,
+                changed_at = @lv_now
+            WHERE req_id = @<r>-ReqId
+              AND env_id  = @<r>-EnvId.
+
         ENDLOOP.
 
         result = VALUE #( FOR r IN reqs ( %tky = r-%tky ) ).
