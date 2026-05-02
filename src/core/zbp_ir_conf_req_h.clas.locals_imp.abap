@@ -10,9 +10,9 @@
           gc_st_rolled_back TYPE zde_requ_status VALUE 'ROLLED_BACK'.
 
         CONSTANTS:
-          gc_role_manager TYPE c LENGTH 20 VALUE 'MANAGER',
-          gc_role_itadmin TYPE c LENGTH 20 VALUE 'IT ADMIN',
-          gc_role_keyuser TYPE c LENGTH 20 VALUE 'KEY USER'.
+          gc_role_manager TYPE zde_role_level VALUE 'MANAGER',
+          gc_role_itadmin TYPE zde_role_level VALUE 'IT ADMIN',
+          gc_role_keyuser TYPE zde_role_level VALUE 'KEY USER'.
 
         METHODS get_instance_authorizations FOR INSTANCE AUTHORIZATION
           IMPORTING keys REQUEST requested_authorizations FOR Req RESULT result.
@@ -36,9 +36,9 @@
     CLASS lhc_Req IMPLEMENTATION.
 
       METHOD get_instance_authorizations.
-        " 1. Kiểm tra từng role riêng biệt — ZUSERROLE có compound key (USER_ID + MODULE_ID)
-        "    nên SELECT SINGLE không MODULE_ID sẽ trả về row bất kỳ → BUG.
-        "    Thay bằng: check EXISTS cho từng role level.
+        " 1. Check each role separately — ZUSERROLE has a compound key (USER_ID + MODULE_ID),
+        "    so SELECT SINGLE without MODULE_ID returns an arbitrary row (bug).
+        "    Use a separate EXISTS check per role level instead.
         DATA: lv_has_manager TYPE abap_bool,
               lv_has_itadmin TYPE abap_bool,
               lv_has_keyuser TYPE abap_bool.
@@ -61,39 +61,38 @@
             AND is_active  = @abap_true
           INTO @lv_has_keyuser.
 
-        " 2. Đọc các record đang xử lý
+        " 2. Read the current request records
         READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
           ENTITY Req FIELDS ( Status ) WITH CORRESPONDING #( keys )
           RESULT DATA(lt_reqs).
 
-        " 3. Map phân quyền theo role:
+        " 3. Map permissions by role
 
-        " Mọi user có bất kỳ role nào đều được submit
+        " Any user with at least one role can submit
         DATA(lv_auth_submit) = COND #(
           WHEN lv_has_manager = abap_true OR lv_has_itadmin = abap_true OR lv_has_keyuser = abap_true
           THEN if_abap_behv=>auth-allowed
           ELSE if_abap_behv=>auth-unauthorized ).
 
-        " Chỉ MANAGER thấy Approve / Reject
+        " Only MANAGER can approve or reject
         DATA(lv_auth_manager) = COND #(
           WHEN lv_has_manager = abap_true
           THEN if_abap_behv=>auth-allowed
           ELSE if_abap_behv=>auth-unauthorized ).
 
-        " Chỉ IT ADMIN thấy Promote / Rollback / Apply
+        " Only IT ADMIN can promote or rollback
         DATA(lv_auth_itadmin) = COND #(
           WHEN lv_has_itadmin = abap_true
           THEN if_abap_behv=>auth-allowed
           ELSE if_abap_behv=>auth-unauthorized ).
 
-        " Edit (draft) và Delete chỉ KEY USER và MANAGER thấy
-        " (IT ADMIN không cần tạo/xóa request)
+        " Only KEY USER and MANAGER can edit or delete (IT ADMIN does not create or delete requests)
         DATA(lv_auth_edit_del) = COND #(
           WHEN lv_has_keyuser = abap_true OR lv_has_manager = abap_true
           THEN if_abap_behv=>auth-allowed
           ELSE if_abap_behv=>auth-unauthorized ).
 
-        " 4. Áp dụng kết quả cho từng Item
+        " 4. Apply permissions to each request
         LOOP AT lt_reqs INTO DATA(ls_req).
           APPEND VALUE #( %tky                 = ls_req-%tky
                           %update              = lv_auth_edit_del
@@ -111,12 +110,12 @@
 
 
       METHOD get_instance_features.
-        " 1. Đọc trạng thái (Status) hiện tại của các Yêu cầu (Request) đang hiển thị trên UI
+        " 1. Read the current status of each request
         READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
           ENTITY Req FIELDS ( Status ) WITH CORRESPONDING #( keys )
           RESULT DATA(lt_reqs).
 
-        " 2. Gán Rule Đóng/Mở các action (Enable/Disable nút) tùy thuộc vào Status
+        " 2. Enable or disable action buttons based on status
 
         LOOP AT lt_reqs INTO DATA(ls_req).
 
@@ -173,22 +172,19 @@
         DATA: lv_now TYPE timestampl.
         GET TIME STAMP FIELD lv_now.
 
-        " Hằng số môi trường (Ép cứng ghi xuống DEV)
+        " Write-back always targets DEV environment
         CONSTANTS: lc_env_dev TYPE string VALUE 'DEV'.
 
-        " Mảng chứa toàn bộ Log (Header + Items) để Insert 1 lần duy nhất
-        DATA: lt_audit_log     TYPE STANDARD TABLE OF zauditlog,
-              ls_audit_log     TYPE zauditlog,
-              lv_record_exists TYPE abap_boolean, " Khai báo biến check tồn tại 1 lần duy nhất
-              lv_new_version   TYPE i.
+        " Collect all audit log entries; insert in one batch at the end
+        DATA lt_audit_log TYPE zcl_gsp26_rule_writer=>tt_audit_logs.
 
-        " Khai báo biến cho Push Notification
+        " Variables for push notification
         DATA: lt_notifications TYPE /iwngw/if_notif_provider=>ty_t_notification,
               ls_notification  TYPE /iwngw/if_notif_provider=>ty_s_notification,
               lt_recipients    TYPE /iwngw/if_notif_provider=>ty_t_notification_recipient,
               ls_recipient     TYPE /iwngw/if_notif_provider=>ty_s_notification_recipient.
 
-        " 1. Đọc dữ liệu Header và Items kèm theo
+        " 1. Read request header and its items
         READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
           ENTITY Req ALL FIELDS WITH CORRESPONDING #( keys ) RESULT DATA(reqs)
           ENTITY Req BY \_Items ALL FIELDS WITH CORRESPONDING #( keys ) RESULT DATA(items).
@@ -196,7 +192,7 @@
         LOOP AT reqs ASSIGNING FIELD-SYMBOL(<r>).
           DATA(lv_has_error) = abap_false.
 
-          " 2. Kiểm tra trạng thái
+          " 2. Check status transition
           IF zcl_gsp26_rule_status=>is_transition_valid_by_status(
                  iv_current_status = CONV string( <r>-Status )
                  iv_next_status    = zcl_gsp26_rule_status=>cv_approved ) = abap_false.
@@ -207,7 +203,7 @@
                              text = 'Request is not in pending approval status.' ) ) TO reported-req.
           ENDIF.
 
-          " 3. Lọc và Kiểm tra Items
+          " 3. Filter items for this request and check at least one exists
           DATA(lt_curr_items) = items.
           DELETE lt_curr_items WHERE ReqId <> <r>-ReqId.
 
@@ -221,12 +217,12 @@
 
           IF lv_has_error = abap_true. CONTINUE. ENDIF.
 
-          " 4. Gọi Validator
+          " 4. Run catalog-level validation for each item
           LOOP AT lt_curr_items INTO DATA(ls_item).
             DATA(lt_val_errors) = zcl_gsp26_rule_validator=>validate_request_item(
                                     iv_conf_id       = ls_item-ConfId
                                     iv_action        = ls_item-Action
-                                    iv_target_env_id = CONV #( lc_env_dev ) ). " Truyền DEV vào validator
+                                    iv_target_env_id = CONV #( lc_env_dev ) ). " target env is always DEV at approve time
             IF lt_val_errors IS NOT INITIAL.
               lv_has_error = abap_true.
               APPEND VALUE #( %tky = <r>-%tky ) TO failed-req.
@@ -240,625 +236,60 @@
 
           IF lv_has_error = abap_true. CONTINUE. ENDIF.
 
-          " =============================================================
-          " Phase 2: PRE-WRITE VALIDATIONS (before any DB change)
-          " Covers: required fields, duplicate business key in DEV,
-          "         duplicate within same request, orphaned source_item_id
-          " =============================================================
-
-          " MMSS
-          SELECT * FROM zmmsafestock_req
-            WHERE req_id = @<r>-ReqId
-            INTO TABLE @DATA(lt_ss_pre).
-
-          DATA lt_ss_bkeys TYPE STANDARD TABLE OF string WITH DEFAULT KEY.
-          CLEAR lt_ss_bkeys.
-
-          LOOP AT lt_ss_pre INTO DATA(ls_ss_pre).
-            DATA(lv_ss_bkey) = |{ ls_ss_pre-plant_id }\|{ ls_ss_pre-mat_group }|.
-
-            CASE ls_ss_pre-action_type.
-              WHEN 'C' OR 'CREATE'.
-                " 1. Required fields
-                IF ls_ss_pre-plant_id IS INITIAL OR ls_ss_pre-mat_group IS INITIAL.
-                  lv_has_error = abap_true.
-                  APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                    severity = if_abap_behv_message=>severity-error
-                    text     = |MMSS CREATE: PlantId and MatGroup are required| ) ) TO reported-req.
-                ENDIF.
-                " 2. Duplicate within same request
-                READ TABLE lt_ss_bkeys WITH KEY table_line = lv_ss_bkey TRANSPORTING NO FIELDS.
-                IF sy-subrc = 0.
-                  lv_has_error = abap_true.
-                  APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                    severity = if_abap_behv_message=>severity-error
-                    text     = |MMSS CREATE: Duplicate key Plant={ ls_ss_pre-plant_id } MatGrp={ ls_ss_pre-mat_group } in same request| ) ) TO reported-req.
-                ELSE.
-                  APPEND lv_ss_bkey TO lt_ss_bkeys.
-                ENDIF.
-                " 3. Already exists in DEV main table
-                SELECT SINGLE @abap_true FROM zmmsafestock
-                  WHERE env_id    = @lc_env_dev
-                    AND plant_id  = @ls_ss_pre-plant_id
-                    AND mat_group = @ls_ss_pre-mat_group
-                  INTO @DATA(lv_ss_dup).
-                IF lv_ss_dup = abap_true.
-                  lv_has_error = abap_true.
-                  APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                    severity = if_abap_behv_message=>severity-error
-                    text     = |MMSS CREATE: Config Plant={ ls_ss_pre-plant_id } MatGrp={ ls_ss_pre-mat_group } already exists in DEV| ) ) TO reported-req.
-                ENDIF.
-              WHEN 'U' OR 'UPDATE' OR 'X' OR 'DELETE'.
-                " 4. source_item_id must exist
-                IF ls_ss_pre-source_item_id IS INITIAL.
-                  lv_has_error = abap_true.
-                  APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                    severity = if_abap_behv_message=>severity-error
-                    text     = |MMSS { ls_ss_pre-action_type }: source_item_id missing| ) ) TO reported-req.
-                ELSE.
-                  SELECT SINGLE @abap_true FROM zmmsafestock
-                    WHERE item_id = @ls_ss_pre-source_item_id
-                    INTO @DATA(lv_ss_src).
-                  IF lv_ss_src <> abap_true.
-                    lv_has_error = abap_true.
-                    APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                      severity = if_abap_behv_message=>severity-error
-                      text     = |MMSS { ls_ss_pre-action_type }: source row not found in DEV (may have been deleted)| ) ) TO reported-req.
-                  ENDIF.
-                ENDIF.
-            ENDCASE.
+          " Phase 2: PRE-WRITE VALIDATIONS
+          DATA(lt_pre_errors) = zcl_gsp26_rule_validator=>validate_approve_pre_write(
+                                  iv_req_id = <r>-ReqId
+                                  iv_env_id = CONV #( lc_env_dev ) ).
+          LOOP AT lt_pre_errors INTO DATA(ls_pre_err).
+            lv_has_error = abap_true.
+            APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
+              severity = if_abap_behv_message=>severity-error
+              text     = ls_pre_err-message ) ) TO reported-req.
           ENDLOOP.
 
-          " MM Routes
-          SELECT * FROM zmmrouteconf_req
-            WHERE req_id = @<r>-ReqId
-            INTO TABLE @DATA(lt_rt_pre).
-
-          DATA lt_rt_bkeys TYPE STANDARD TABLE OF string WITH DEFAULT KEY.
-          CLEAR lt_rt_bkeys.
-
-          LOOP AT lt_rt_pre INTO DATA(ls_rt_pre).
-            DATA(lv_rt_bkey) = |{ ls_rt_pre-plant_id }\|{ ls_rt_pre-send_wh }\|{ ls_rt_pre-receive_wh }|.
-
-            CASE ls_rt_pre-action_type.
-              WHEN 'C' OR 'CREATE'.
-                " 1. Required fields
-                IF ls_rt_pre-plant_id IS INITIAL OR ls_rt_pre-send_wh IS INITIAL OR ls_rt_pre-receive_wh IS INITIAL.
-                  lv_has_error = abap_true.
-                  APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                    severity = if_abap_behv_message=>severity-error
-                    text     = |MM Route CREATE: PlantId, SendWh, ReceiveWh are required| ) ) TO reported-req.
-                ENDIF.
-                " 2. Duplicate within same request
-                READ TABLE lt_rt_bkeys WITH KEY table_line = lv_rt_bkey TRANSPORTING NO FIELDS.
-                IF sy-subrc = 0.
-                  lv_has_error = abap_true.
-                  APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                    severity = if_abap_behv_message=>severity-error
-                    text     = |MM Route CREATE: Duplicate key Plant={ ls_rt_pre-plant_id } SendWh={ ls_rt_pre-send_wh } RecvWh={ ls_rt_pre-receive_wh } in same request| ) ) TO reported-req.
-                ELSE.
-                  APPEND lv_rt_bkey TO lt_rt_bkeys.
-                ENDIF.
-                " 3. Already exists in DEV main table
-                SELECT SINGLE @abap_true FROM zmmrouteconf
-                  WHERE env_id     = @lc_env_dev
-                    AND plant_id   = @ls_rt_pre-plant_id
-                    AND send_wh    = @ls_rt_pre-send_wh
-                    AND receive_wh = @ls_rt_pre-receive_wh
-                  INTO @DATA(lv_rt_dup).
-                IF lv_rt_dup = abap_true.
-                  lv_has_error = abap_true.
-                  APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                    severity = if_abap_behv_message=>severity-error
-                    text     = |MM Route CREATE: Route Plant={ ls_rt_pre-plant_id } SendWh={ ls_rt_pre-send_wh } RecvWh={ ls_rt_pre-receive_wh } already exists in DEV| ) ) TO reported-req.
-                ENDIF.
-              WHEN 'U' OR 'X'.
-                " 4. source_item_id must exist
-                IF ls_rt_pre-source_item_id IS INITIAL.
-                  lv_has_error = abap_true.
-                  APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                    severity = if_abap_behv_message=>severity-error
-                    text     = |MM Route { ls_rt_pre-action_type }: source_item_id missing| ) ) TO reported-req.
-                ELSE.
-                  SELECT SINGLE @abap_true FROM zmmrouteconf
-                    WHERE item_id = @ls_rt_pre-source_item_id
-                    INTO @DATA(lv_rt_src).
-                  IF lv_rt_src <> abap_true.
-                    lv_has_error = abap_true.
-                    APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                      severity = if_abap_behv_message=>severity-error
-                      text     = |MM Route { ls_rt_pre-action_type }: source row not found in DEV (may have been deleted)| ) ) TO reported-req.
-                  ENDIF.
-                ENDIF.
-            ENDCASE.
-          ENDLOOP.
-
-          " FI Limit
-          SELECT * FROM zfilimitreq
-            WHERE req_id = @<r>-ReqId
-            INTO TABLE @DATA(lt_fi_pre).
-
-          DATA lt_fi_bkeys TYPE STANDARD TABLE OF string WITH DEFAULT KEY.
-          CLEAR lt_fi_bkeys.
-
-          LOOP AT lt_fi_pre INTO DATA(ls_fi_pre).
-            DATA(lv_fi_bkey) = |{ ls_fi_pre-expense_type }\|{ ls_fi_pre-gl_account }|.
-
-            CASE ls_fi_pre-action_type.
-              WHEN 'C' OR 'CREATE'.
-                " 1. Required fields
-                IF ls_fi_pre-expense_type IS INITIAL OR ls_fi_pre-gl_account IS INITIAL.
-                  lv_has_error = abap_true.
-                  APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                    severity = if_abap_behv_message=>severity-error
-                    text     = |FI Limit CREATE: ExpenseType and GlAccount are required| ) ) TO reported-req.
-                ENDIF.
-                " 2. Duplicate within same request
-                READ TABLE lt_fi_bkeys WITH KEY table_line = lv_fi_bkey TRANSPORTING NO FIELDS.
-                IF sy-subrc = 0.
-                  lv_has_error = abap_true.
-                  APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                    severity = if_abap_behv_message=>severity-error
-                    text     = |FI Limit CREATE: Duplicate key ExpType={ ls_fi_pre-expense_type } GlAcc={ ls_fi_pre-gl_account } in same request| ) ) TO reported-req.
-                ELSE.
-                  APPEND lv_fi_bkey TO lt_fi_bkeys.
-                ENDIF.
-                " 3. Already exists in DEV main table
-                SELECT SINGLE @abap_true FROM zfilimitconf
-                  WHERE env_id       = @lc_env_dev
-                    AND expense_type = @ls_fi_pre-expense_type
-                    AND gl_account   = @ls_fi_pre-gl_account
-                  INTO @DATA(lv_fi_dup).
-                IF lv_fi_dup = abap_true.
-                  lv_has_error = abap_true.
-                  APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                    severity = if_abap_behv_message=>severity-error
-                    text     = |FI Limit CREATE: Config ExpType={ ls_fi_pre-expense_type } GlAcc={ ls_fi_pre-gl_account } already exists in DEV| ) ) TO reported-req.
-                ENDIF.
-              WHEN 'U' OR 'X'.
-                " 4. source_item_id must exist
-                IF ls_fi_pre-source_item_id IS INITIAL.
-                  lv_has_error = abap_true.
-                  APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                    severity = if_abap_behv_message=>severity-error
-                    text     = |FI Limit { ls_fi_pre-action_type }: source_item_id missing| ) ) TO reported-req.
-                ELSE.
-                  SELECT SINGLE @abap_true FROM zfilimitconf
-                    WHERE item_id = @ls_fi_pre-source_item_id
-                    INTO @DATA(lv_fi_src).
-                  IF lv_fi_src <> abap_true.
-                    lv_has_error = abap_true.
-                    APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                      severity = if_abap_behv_message=>severity-error
-                      text     = |FI Limit { ls_fi_pre-action_type }: source row not found in DEV (may have been deleted)| ) ) TO reported-req.
-                  ENDIF.
-                ENDIF.
-            ENDCASE.
-          ENDLOOP.
-
-          "  SD Price
-          SELECT * FROM zsd_price_req
-            WHERE req_id = @<r>-ReqId
-            INTO TABLE @DATA(lt_sd_pre).
-
-          DATA lt_sd_bkeys TYPE STANDARD TABLE OF string WITH DEFAULT KEY.
-          CLEAR lt_sd_bkeys.
-
-          LOOP AT lt_sd_pre INTO DATA(ls_sd_pre).
-            DATA(lv_sd_bkey) = |{ ls_sd_pre-branch_id }\|{ ls_sd_pre-cust_group }\|{ ls_sd_pre-material_grp }|.
-
-            CASE ls_sd_pre-action_type.
-              WHEN 'C' OR 'CREATE'.
-                " 1. Required fields
-                IF ls_sd_pre-branch_id IS INITIAL OR ls_sd_pre-cust_group IS INITIAL OR ls_sd_pre-material_grp IS INITIAL.
-                  lv_has_error = abap_true.
-                  APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                    severity = if_abap_behv_message=>severity-error
-                    text     = |SD Price CREATE: BranchId, CustGroup, MaterialGrp are required| ) ) TO reported-req.
-                ENDIF.
-                " 2. Duplicate within same request
-                READ TABLE lt_sd_bkeys WITH KEY table_line = lv_sd_bkey TRANSPORTING NO FIELDS.
-                IF sy-subrc = 0.
-                  lv_has_error = abap_true.
-                  APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                    severity = if_abap_behv_message=>severity-error
-                    text     = |SD Price CREATE: Duplicate key Branch={ ls_sd_pre-branch_id } CustGrp={ ls_sd_pre-cust_group } MatGrp={ ls_sd_pre-material_grp } in same request| ) ) TO reported-req.
-                ELSE.
-                  APPEND lv_sd_bkey TO lt_sd_bkeys.
-                ENDIF.
-                " 3. Already exists in DEV main table
-                SELECT SINGLE @abap_true FROM zsd_price_conf
-                  WHERE env_id       = @lc_env_dev
-                    AND branch_id    = @ls_sd_pre-branch_id
-                    AND cust_group   = @ls_sd_pre-cust_group
-                    AND material_grp = @ls_sd_pre-material_grp
-                  INTO @DATA(lv_sd_dup).
-                IF lv_sd_dup = abap_true.
-                  lv_has_error = abap_true.
-                  APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                    severity = if_abap_behv_message=>severity-error
-                    text     = |SD Price CREATE: Config Branch={ ls_sd_pre-branch_id } CustGrp={ ls_sd_pre-cust_group } MatGrp={ ls_sd_pre-material_grp } already exists in DEV| ) ) TO reported-req.
-                ENDIF.
-              WHEN 'U' OR 'X'.
-                " 4. source_item_id must exist
-                IF ls_sd_pre-source_item_id IS INITIAL.
-                  lv_has_error = abap_true.
-                  APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                    severity = if_abap_behv_message=>severity-error
-                    text     = |SD Price { ls_sd_pre-action_type }: source_item_id missing| ) ) TO reported-req.
-                ELSE.
-                  SELECT SINGLE @abap_true FROM zsd_price_conf
-                    WHERE item_id = @ls_sd_pre-source_item_id
-                    INTO @DATA(lv_sd_src).
-                  IF lv_sd_src <> abap_true.
-                    lv_has_error = abap_true.
-                    APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
-                      severity = if_abap_behv_message=>severity-error
-                      text     = |SD Price { ls_sd_pre-action_type }: source row not found in DEV (may have been deleted)| ) ) TO reported-req.
-                  ENDIF.
-                ENDIF.
-            ENDCASE.
-          ENDLOOP.
-
-          " Gate: abort if any pre-write validation failed
           IF lv_has_error = abap_true.
             APPEND VALUE #( %tky = <r>-%tky ) TO failed-req.
             CONTINUE.
           ENDIF.
 
-          " 6. Cập nhật trạng thái APPROVED cho Request Header
+          " 6. Mark the request as APPROVED
           MODIFY ENTITIES OF zir_conf_req_h IN LOCAL MODE
             ENTITY Req UPDATE FIELDS ( Status ApprovedBy ApprovedAt )
             WITH VALUE #( ( %tky = <r>-%tky Status = gc_st_approved ApprovedBy = sy-uname ApprovedAt = lv_now ) ).
 
-          DATA(lt_ver_results) = zcl_gsp26_rule_snapshot=>increment_version( iv_req_id = <r>-ReqId ).
+          " Phase 3: WRITE-BACK — delegate each module to zcl_gsp26_rule_writer
+          APPEND LINES OF zcl_gsp26_rule_writer=>write_back_mmss(
+            iv_req_id = <r>-ReqId iv_env_id = CONV #( lc_env_dev )
+            iv_now = lv_now iv_changed_by = sy-uname ) TO lt_audit_log.
+          APPEND LINES OF zcl_gsp26_rule_writer=>write_back_mmroute(
+            iv_req_id = <r>-ReqId iv_env_id = CONV #( lc_env_dev )
+            iv_now = lv_now iv_changed_by = sy-uname ) TO lt_audit_log.
+          APPEND LINES OF zcl_gsp26_rule_writer=>write_back_fi(
+            iv_req_id = <r>-ReqId iv_env_id = CONV #( lc_env_dev )
+            iv_now = lv_now iv_changed_by = sy-uname ) TO lt_audit_log.
+          APPEND LINES OF zcl_gsp26_rule_writer=>write_back_sd(
+            iv_req_id = <r>-ReqId iv_env_id = CONV #( lc_env_dev )
+            iv_now = lv_now iv_changed_by = sy-uname ) TO lt_audit_log.
 
-          " WRITE-BACK VÀ GHI LOG CHI TIẾT ITEM: zmmsafestock_req
-          SELECT * FROM zmmsafestock_req WHERE req_id = @<r>-ReqId INTO TABLE @DATA(lt_ss_req).
-          IF lt_ss_req IS NOT INITIAL.
-            LOOP AT lt_ss_req ASSIGNING FIELD-SYMBOL(<ss>).
-
-              ls_audit_log-client      = sy-mandt.
-              TRY. ls_audit_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-              ls_audit_log-req_id      = <r>-ReqId.
-              ls_audit_log-conf_id     = <ss>-conf_id.
-              ls_audit_log-module_id   = 'MM'.
-              ls_audit_log-table_name  = 'ZMMSAFESTOCK'.
-              ls_audit_log-env_id      = lc_env_dev.
-              ls_audit_log-object_key  = COND #( WHEN <ss>-action_type = 'C' OR <ss>-action_type = 'CREATE'
-                                                 THEN <ss>-item_id
-                                                 ELSE <ss>-source_item_id ).
-              CASE <ss>-action_type.
-                WHEN 'C' OR 'CREATE'.
-                  ls_audit_log-action_type = 'CREATE'.
-                  ls_audit_log-old_data    = '{}' .
-                  ls_audit_log-new_data    = |\{"PLANT_ID":"{ <ss>-plant_id }","MAT_GROUP":"{ <ss>-mat_group }","MIN_QTY":"{ <ss>-min_qty }"\}|.
-                WHEN 'U' OR 'UPDATE'.
-                  ls_audit_log-action_type = 'UPDATE'.
-                  ls_audit_log-old_data    = |\{"MIN_QTY":"{ <ss>-old_min_qty }"\}|.
-                  ls_audit_log-new_data    = |\{"MIN_QTY":"{ <ss>-min_qty }"\}|.
-                WHEN OTHERS.
-                  ls_audit_log-action_type = 'DELETE'.
-                  ls_audit_log-old_data    = |\{"ENV_ID":"{ lc_env_dev }","PLANT_ID":"{ <ss>-old_plant_id }","MAT_GROUP":"{ <ss>-old_mat_group }","MIN_QTY":"{ <ss>-old_min_qty }"\}|.
-                  ls_audit_log-new_data    = '{}'.
-              ENDCASE.
-              ls_audit_log-changed_by  = sy-uname.
-              ls_audit_log-changed_at  = lv_now.
-              APPEND ls_audit_log TO lt_audit_log.
-              CLEAR ls_audit_log.
-
-              CLEAR lv_record_exists.
-              CASE <ss>-action_type.
-                WHEN 'UPDATE' OR 'U'.
-                  " Update only value fields on the DEV row — do NOT change env_id.
-                  " The row already belongs to DEV (source_item_id points to the DEV row).
-                  SELECT SINGLE @abap_true FROM zmmsafestock
-                    WHERE item_id = @<ss>-source_item_id INTO @lv_record_exists.
-                  IF lv_record_exists = abap_true.
-                    lv_new_version = <ss>-version_no + 1.
-                    UPDATE zmmsafestock SET
-                      min_qty    = @<ss>-min_qty,
-                      version_no = @lv_new_version,
-                      req_id     = @<r>-ReqId,
-                      changed_by = @sy-uname,
-                      changed_at = @lv_now
-                    WHERE item_id = @<ss>-source_item_id.
-                  ENDIF.
-
-
-                WHEN 'CREATE' OR 'C'.
-                  INSERT zmmsafestock FROM @( VALUE zmmsafestock(
-                    client     = sy-mandt
-                    item_id    = <ss>-item_id
-                    req_id     = <r>-ReqId
-                    env_id     = lc_env_dev
-                    plant_id   = <ss>-plant_id
-                    mat_group  = <ss>-mat_group
-                    min_qty    = <ss>-min_qty
-                    version_no = 1
-                    created_by = <ss>-created_by
-                    created_at = lv_now
-                    changed_by = sy-uname
-                    changed_at = lv_now ) ).
-                WHEN 'DELETE' OR 'X'.
-                  DELETE FROM zmmsafestock WHERE item_id = @<ss>-source_item_id.
-              ENDCASE.
-            ENDLOOP.
-            UPDATE zmmsafestock_req SET
-              line_status = @gc_st_approved,
-              changed_by  = @sy-uname,
-              changed_at  = @lv_now
-            WHERE req_id = @<r>-ReqId.
-          ENDIF.
-
-          " WRITE-BACK VÀ GHI LOG CHI TIẾT ITEM: zmmrouteconf_req
-          SELECT * FROM zmmrouteconf_req WHERE req_id = @<r>-ReqId INTO TABLE @DATA(lt_route_req).
-          IF lt_route_req IS NOT INITIAL.
-            LOOP AT lt_route_req ASSIGNING FIELD-SYMBOL(<rt>).
-
-              ls_audit_log-client      = sy-mandt.
-              TRY. ls_audit_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-              ls_audit_log-req_id      = <r>-ReqId.
-              ls_audit_log-conf_id     = <rt>-conf_id.
-              ls_audit_log-module_id   = 'MM'.
-              ls_audit_log-table_name  = 'ZMMROUTECONF'.
-              ls_audit_log-env_id      = lc_env_dev.
-              ls_audit_log-object_key  = COND #( WHEN <rt>-action_type = 'C'
-                                                 THEN <rt>-item_id
-                                                 ELSE <rt>-source_item_id ).
-              CASE <rt>-action_type.
-                WHEN 'C'.
-                  ls_audit_log-action_type = 'CREATE'.
-                  ls_audit_log-old_data    = '{}' .
-                  ls_audit_log-new_data    = |\{"PLANT_ID":"{ <rt>-plant_id }","SEND_WH":"{ <rt>-send_wh }","RECEIVE_WH":"{ <rt>-receive_wh }","TRANS_MODE":"{ <rt>-trans_mode }","IS_ALLOWED":"{ <rt>-is_allowed }"\}|.
-                WHEN 'U'.
-                  ls_audit_log-action_type = 'UPDATE'.
-                  SELECT SINGLE is_allowed, inspector_id FROM zmmrouteconf
-                    WHERE item_id = @<rt>-source_item_id INTO @DATA(ls_rt_cur).
-                  ls_audit_log-old_data = |\{"TRANS_MODE":"{ <rt>-old_trans_mode }","IS_ALLOWED":"{ ls_rt_cur-is_allowed }","INSPECTOR_ID":"{ ls_rt_cur-inspector_id }"\}|.
-                  ls_audit_log-new_data = |\{"TRANS_MODE":"{ <rt>-trans_mode }","IS_ALLOWED":"{ <rt>-is_allowed }","INSPECTOR_ID":"{ <rt>-inspector_id }"\}|.
-                WHEN OTHERS.
-                  ls_audit_log-action_type = 'DELETE'.
-                  SELECT SINGLE is_allowed, inspector_id FROM zmmrouteconf
-                    WHERE item_id = @<rt>-source_item_id INTO @DATA(ls_rt_del_cur).
-                  ls_audit_log-old_data    =
-                    |\{"ENV_ID":"{ lc_env_dev }","PLANT_ID":"{ <rt>-old_plant_id }",| &&
-                    |"SEND_WH":"{ <rt>-old_send_wh }","RECEIVE_WH":"{ <rt>-old_receive_wh }",| &&
-                    |"TRANS_MODE":"{ <rt>-old_trans_mode }","IS_ALLOWED":"{ ls_rt_del_cur-is_allowed }",| &&
-                    |"INSPECTOR_ID":"{ ls_rt_del_cur-inspector_id }"\}|.
-                  ls_audit_log-new_data    = '{}'.
-              ENDCASE.
-              ls_audit_log-changed_by  = sy-uname.
-              ls_audit_log-changed_at  = lv_now.
-              APPEND ls_audit_log TO lt_audit_log.
-              CLEAR ls_audit_log.
-
-              CLEAR lv_record_exists.
-              CASE <rt>-action_type.
-                WHEN 'U'.
-                  " Update only value fields on the DEV row — do NOT change env_id.
-                  SELECT SINGLE @abap_true FROM zmmrouteconf WHERE item_id = @<rt>-source_item_id INTO @lv_record_exists.
-                  IF lv_record_exists = abap_true.
-                    UPDATE zmmrouteconf SET
-                      inspector_id = @<rt>-inspector_id,
-                      trans_mode   = @<rt>-trans_mode,
-                      is_allowed   = @<rt>-is_allowed,
-                      version_no   = @<rt>-version_no,
-                      req_id       = @<r>-ReqId,
-                      changed_by   = @sy-uname,
-                      changed_at   = @lv_now
-                    WHERE item_id = @<rt>-source_item_id.
-                  ENDIF.
-                WHEN 'C'.
-                  INSERT zmmrouteconf FROM @( VALUE zmmrouteconf(
-                    client       = sy-mandt
-                    item_id      = <rt>-item_id
-                    req_id       = <r>-ReqId
-                    env_id       = lc_env_dev
-                    plant_id     = <rt>-plant_id
-                    send_wh      = <rt>-send_wh
-                    receive_wh   = <rt>-receive_wh
-                    trans_mode   = <rt>-trans_mode
-                    is_allowed   = <rt>-is_allowed
-                    version_no   = 1
-                    created_at   = lv_now
-                    changed_by   = sy-uname
-                    changed_at   = lv_now ) ).
-                WHEN 'X'.
-                  DELETE FROM zmmrouteconf WHERE item_id = @<rt>-source_item_id.
-              ENDCASE.
-            ENDLOOP.
-            UPDATE zmmrouteconf_req SET line_status = @gc_st_approved, changed_by = @sy-uname, changed_at = @lv_now WHERE req_id = @<r>-ReqId.
-          ENDIF.
-
-          " WRITE-BACK VÀ GHI LOG CHI TIẾT ITEM: zfilimitreq
-          SELECT * FROM zfilimitreq WHERE req_id = @<r>-ReqId INTO TABLE @DATA(lt_fi_req).
-          IF lt_fi_req IS NOT INITIAL.
-            LOOP AT lt_fi_req ASSIGNING FIELD-SYMBOL(<fi>).
-
-              ls_audit_log-client      = sy-mandt.
-              TRY. ls_audit_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-              ls_audit_log-req_id      = <r>-ReqId.
-              ls_audit_log-conf_id     = <fi>-conf_id.
-              ls_audit_log-module_id   = 'FI'.
-              ls_audit_log-table_name  = 'ZFILIMITCONF'.
-              ls_audit_log-env_id      = lc_env_dev.
-              ls_audit_log-object_key  = COND #( WHEN <fi>-action_type = 'C'
-                                                 THEN <fi>-item_id
-                                                 ELSE <fi>-source_item_id ).
-              CASE <fi>-action_type.
-                WHEN 'C'.
-                  ls_audit_log-action_type = 'CREATE'.
-                  ls_audit_log-old_data    = '{}' .
-                  ls_audit_log-new_data    = |\{"EXPENSE_TYPE":"{ <fi>-expense_type }","GL_ACCOUNT":"{ <fi>-gl_account }","AUTO_APPR_LIM":"{ <fi>-auto_appr_lim }","CURRENCY":"{ <fi>-currency }"\}|.
-                WHEN 'U'.
-                  ls_audit_log-action_type = 'UPDATE'.
-                  ls_audit_log-old_data    = |\{"AUTO_APPR_LIM":"{ <fi>-old_auto_appr_lim }","CURRENCY":"{ <fi>-old_currency }"\}|.
-                  ls_audit_log-new_data    = |\{"AUTO_APPR_LIM":"{ <fi>-auto_appr_lim }","CURRENCY":"{ <fi>-currency }"\}|.
-                WHEN OTHERS.
-                  ls_audit_log-action_type = 'DELETE'.
-                  ls_audit_log-old_data    = |\{"ENV_ID":"{ lc_env_dev }","EXPENSE_TYPE":"{ <fi>-old_expense_type }","GL_ACCOUNT":"{ <fi>-old_gl_account }","AUTO_APPR_LIM":"{ <fi>-old_auto_appr_lim }","CURRENCY":"{ <fi>-old_currency }"\}|.
-                  ls_audit_log-new_data    = '{}'.
-              ENDCASE.
-              ls_audit_log-changed_by  = sy-uname.
-              ls_audit_log-changed_at  = lv_now.
-              APPEND ls_audit_log TO lt_audit_log.
-              CLEAR ls_audit_log.
-
-              CLEAR lv_record_exists.
-              CASE <fi>-action_type.
-                WHEN 'U'.
-                  " Update only value fields on the DEV row — do NOT change env_id.
-                  SELECT SINGLE @abap_true FROM zfilimitconf WHERE item_id = @<fi>-source_item_id INTO @lv_record_exists.
-                  IF lv_record_exists = abap_true.
-                    UPDATE zfilimitconf SET
-                      auto_appr_lim = @<fi>-auto_appr_lim,
-                      currency      = @<fi>-currency,
-                      version_no    = @<fi>-version_no,
-                      req_id        = @<r>-ReqId,
-                      changed_by    = @sy-uname,
-                      changed_at    = @lv_now
-                    WHERE item_id = @<fi>-source_item_id.
-                  ENDIF.
-                WHEN 'C'.
-                  INSERT zfilimitconf FROM @( VALUE zfilimitconf(
-                    client        = sy-mandt
-                    item_id       = <fi>-item_id
-                    req_id        = <r>-ReqId
-                    env_id        = lc_env_dev
-                    expense_type  = <fi>-expense_type
-                    gl_account    = <fi>-gl_account
-                    auto_appr_lim = <fi>-auto_appr_lim
-                    currency      = <fi>-currency
-                    version_no    = 1
-                    created_at    = lv_now
-                    changed_by    = sy-uname
-                    changed_at    = lv_now ) ).
-                WHEN 'X'.
-                  DELETE FROM zfilimitconf WHERE item_id = @<fi>-source_item_id.
-              ENDCASE.
-            ENDLOOP.
-            UPDATE zfilimitreq SET line_status = @gc_st_approved, changed_by = @sy-uname, changed_at = @lv_now WHERE req_id = @<r>-ReqId.
-          ENDIF.
-
-          "  WRITE-BACK VÀ GHI LOG CHI TIẾT ITEM: zsd_price_req
-          SELECT * FROM zsd_price_req WHERE req_id = @<r>-ReqId INTO TABLE @DATA(lt_sd_req).
-          IF lt_sd_req IS NOT INITIAL.
-            LOOP AT lt_sd_req ASSIGNING FIELD-SYMBOL(<sd>).
-
-              ls_audit_log-client      = sy-mandt.
-              TRY. ls_audit_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-              ls_audit_log-req_id      = <r>-ReqId.
-              ls_audit_log-conf_id     = <sd>-conf_id.
-              ls_audit_log-module_id   = 'SD'.
-              ls_audit_log-table_name  = 'ZSD_PRICE_CONF'.
-              ls_audit_log-env_id      = lc_env_dev.
-              ls_audit_log-object_key  = COND #( WHEN <sd>-action_type = 'C'
-                                                 THEN <sd>-item_id
-                                                 ELSE <sd>-source_item_id ).
-              CASE <sd>-action_type.
-                WHEN 'C'.
-                  ls_audit_log-action_type = 'CREATE'.
-                  ls_audit_log-old_data    = '{}'.
-                  ls_audit_log-new_data    =
-                    |\{"BRANCH_ID":"{ <sd>-branch_id }","CUST_GROUP":"{ <sd>-cust_group }",| &&
-                    |"MATERIAL_GRP":"{ <sd>-material_grp }","MAX_DISCOUNT":"{ <sd>-max_discount }",| &&
-                    |"MIN_ORDER_VAL":"{ <sd>-min_order_val }","APPROVER_GRP":"{ <sd>-approver_grp }",| &&
-                    |"CURRENCY":"{ <sd>-currency }","VALID_FROM":"{ <sd>-valid_from }",| &&
-                    |"VALID_TO":"{ <sd>-valid_to }"\}|.
-                WHEN 'U'.
-                  ls_audit_log-action_type = 'UPDATE'.
-                  SELECT SINGLE approver_grp, currency, valid_from, valid_to FROM zsd_price_conf
-                    WHERE item_id = @<sd>-source_item_id INTO @DATA(ls_sd_cur).
-                  ls_audit_log-old_data =
-                    |\{"MAX_DISCOUNT":"{ <sd>-old_max_discount }","MIN_ORDER_VAL":"{ <sd>-old_min_order_val }",| &&
-                    |"APPROVER_GRP":"{ ls_sd_cur-approver_grp }","CURRENCY":"{ ls_sd_cur-currency }",| &&
-                    |"VALID_FROM":"{ ls_sd_cur-valid_from }","VALID_TO":"{ ls_sd_cur-valid_to }"\}|.
-                  ls_audit_log-new_data =
-                    |\{"MAX_DISCOUNT":"{ <sd>-max_discount }","MIN_ORDER_VAL":"{ <sd>-min_order_val }",| &&
-                    |"APPROVER_GRP":"{ <sd>-approver_grp }","CURRENCY":"{ <sd>-currency }",| &&
-                    |"VALID_FROM":"{ <sd>-valid_from }","VALID_TO":"{ <sd>-valid_to }"\}|.
-                WHEN OTHERS.
-                  ls_audit_log-action_type = 'DELETE'.
-                  SELECT SINGLE approver_grp, currency, valid_from, valid_to FROM zsd_price_conf
-                    WHERE item_id = @<sd>-source_item_id INTO @DATA(ls_sd_del_cur).
-                  ls_audit_log-old_data    =
-                    |\{"ENV_ID":"{ lc_env_dev }","BRANCH_ID":"{ <sd>-old_branch_id }","CUST_GROUP":"{ <sd>-old_cust_group }",| &&
-                    |"MATERIAL_GRP":"{ <sd>-old_material_grp }","MAX_DISCOUNT":"{ <sd>-old_max_discount }",| &&
-                    |"MIN_ORDER_VAL":"{ <sd>-old_min_order_val }","APPROVER_GRP":"{ ls_sd_del_cur-approver_grp }",| &&
-                    |"CURRENCY":"{ ls_sd_del_cur-currency }","VALID_FROM":"{ ls_sd_del_cur-valid_from }",| &&
-                    |"VALID_TO":"{ ls_sd_del_cur-valid_to }"\}|.
-                  ls_audit_log-new_data    = '{}'.
-              ENDCASE.
-              ls_audit_log-changed_by  = sy-uname.
-              ls_audit_log-changed_at  = lv_now.
-              APPEND ls_audit_log TO lt_audit_log.
-              CLEAR ls_audit_log.
-
-              CLEAR lv_record_exists.
-              CASE <sd>-action_type.
-                WHEN 'U'.
-                  " Update only value fields on the DEV row — do NOT change env_id.
-                  SELECT SINGLE @abap_true FROM zsd_price_conf WHERE item_id = @<sd>-source_item_id INTO @lv_record_exists.
-                  IF lv_record_exists = abap_true.
-                    UPDATE zsd_price_conf SET
-                      max_discount  = @<sd>-max_discount,
-                      min_order_val = @<sd>-min_order_val,
-                      approver_grp  = @<sd>-approver_grp,
-                      currency      = @<sd>-currency,
-                      valid_from    = @<sd>-valid_from,
-                      valid_to      = @<sd>-valid_to,
-                      version_no    = @<sd>-version_no,
-                      req_id        = @<r>-ReqId,
-                      changed_by    = @sy-uname,
-                      changed_at    = @lv_now
-                    WHERE item_id = @<sd>-source_item_id.
-                  ENDIF.
-                WHEN 'C'.
-                  INSERT zsd_price_conf FROM @( VALUE zsd_price_conf(
-                    client        = sy-mandt
-                    item_id       = <sd>-item_id
-                    req_id        = <r>-ReqId
-                    env_id        = lc_env_dev
-                    branch_id     = <sd>-branch_id
-                    cust_group    = <sd>-cust_group
-                    material_grp  = <sd>-material_grp
-                    max_discount  = <sd>-max_discount
-                    min_order_val = <sd>-min_order_val
-                    currency      = <sd>-currency
-                    valid_from    = <sd>-valid_from
-                    valid_to      = <sd>-valid_to
-                    version_no    = 1
-                    created_at    = lv_now
-                    changed_by    = sy-uname
-                    changed_at    = lv_now ) ).
-                WHEN 'X'.
-                  DELETE FROM zsd_price_conf WHERE item_id = @<sd>-source_item_id.
-              ENDCASE.
-            ENDLOOP.
-            UPDATE zsd_price_req SET line_status = @gc_st_approved, changed_by = @sy-uname, changed_at = @lv_now WHERE req_id = @<r>-ReqId.
-          ENDIF.
-
-          " THÔNG BÁO CHO NGƯỜI TẠO REQUEST
+          " Send push notification to the request creator
           CLEAR: lt_notifications, lt_recipients, ls_notification, ls_recipient.
 
-          " 1. Xác định Người Nhận (Gửi ngược lại cho người tạo phiếu)
+          " 1. Recipient is the user who created the request
           ls_recipient-id = <r>-CreatedBy.
           APPEND ls_recipient TO lt_recipients.
 
-          " 2. Khởi tạo dữ liệu Thông báo
+          " 2. Build notification payload
           TRY.
               ls_notification-id = cl_system_uuid=>create_uuid_x16_static( ).
             CATCH cx_uuid_error.
           ENDTRY.
 
-          ls_notification-type_key     = 'REQ_APPROVED'. " Khớp với Type ID định nghĩa trong Class Provider
+          ls_notification-type_key     = 'REQ_APPROVED'. " must match the type ID registered in the notification provider class
           ls_notification-type_version = '1'.
           ls_notification-priority     = /iwngw/if_notif_provider=>gcs_priorities-low.
           ls_notification-recipients   = lt_recipients.
 
-          " 3. Truyền giá trị cho biến {ReqTitle}
-          " SỬA LỖI: Cấu trúc parameters phải lồng thêm khai báo ngôn ngữ (language)
+          " 3. Pass {ReqTitle} variable — parameters must be wrapped in a language block
           ls_notification-parameters = VALUE #(
             ( language = sy-langu
               parameters = VALUE #(
@@ -867,8 +298,8 @@
             )
           ).
 
-          " 4. Navigation (Click vào quả chuông mở App)
-          " LƯU Ý: Đảm bảo SemanticObject và Action khớp với manifest.json của App Manager
+          " 4. Deep-link so clicking the notification opens the request
+          " SemanticObject and Action must match manifest.json of the request manager app
           ls_notification-navigation_parameters = VALUE #(
             ( name = 'SemanticObject' value = 'ConfigReq' )
             ( name = 'Action'         value = 'manage' )
@@ -877,7 +308,7 @@
 
           APPEND ls_notification TO lt_notifications.
 
-          " 5. BÓP CÒ BẮN THÔNG BÁO!
+          " 5. Send the notification
           TRY.
               /iwngw/cl_notification_api=>create_notifications(
                 EXPORTING
@@ -886,16 +317,13 @@
               ).
             CATCH /iwngw/cx_notification_api INTO DATA(lx_notif_error).
           ENDTRY.
-          " =============================================================
 
         ENDLOOP.
 
-        " 7. INSERT TOÀN BỘ LOG XUỐNG DỮ LIỆU CHỈ TRONG 1 LẦN DUY NHẤT
-        IF lt_audit_log IS NOT INITIAL.
-          INSERT zauditlog FROM TABLE @lt_audit_log.
-        ENDIF.
+        " 7. Flush all collected audit logs in one INSERT
+        zcl_gsp26_rule_writer=>flush_audit_logs( lt_audit_log ).
 
-        " 8. Đọc lại để trả về %param
+        " 8. Re-read to populate %param in the result
         READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
           ENTITY Req ALL FIELDS WITH CORRESPONDING #( keys ) RESULT DATA(lt_final).
 
@@ -909,7 +337,7 @@
         DATA lv_now TYPE timestampl.
         GET TIME STAMP FIELD lv_now.
 
-        " 1. Đọc dữ liệu Header
+        " 1. Read request headers
         READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
           ENTITY Req ALL FIELDS WITH CORRESPONDING #( keys )
           RESULT DATA(reqs).
@@ -917,14 +345,14 @@
         LOOP AT reqs ASSIGNING FIELD-SYMBOL(<r>).
           DATA(lv_has_error) = abap_false.
 
-          " 2. Lấy lý do từ parameter của Action Popup
+          " 2. Get rejection reason from the action popup parameter
           DATA(ls_key_entry) = VALUE #( keys[ %tky = <r>-%tky ] OPTIONAL ).
           DATA(lv_reason)    = ls_key_entry-%param-reason.
 
-          " 3. Làm sạch dữ liệu trạng thái
+          " 3. Trim status value
           DATA(lv_current_status) = condense( <r>-Status ).
 
-          " 4. Kiểm tra lý do trống
+          " 4. Rejection reason must not be empty
           IF lv_reason IS INITIAL.
             lv_has_error = abap_true.
             APPEND VALUE #( %tky = <r>-%tky ) TO failed-req.
@@ -935,7 +363,7 @@
                           ) TO reported-req.
           ENDIF.
 
-          " 5. Kiểm tra trạng thái SUBMITTED
+          " 5. Request must be in SUBMITTED status
           IF zcl_gsp26_rule_status=>is_transition_valid_by_status(
                  iv_current_status = CONV string( lv_current_status )
                  iv_next_status    = zcl_gsp26_rule_status=>cv_rejected ) = abap_false AND lv_has_error = abap_false.
@@ -951,7 +379,7 @@
 
           IF lv_has_error = abap_true. CONTINUE. ENDIF.
 
-          " 6. Ghi Log Audit
+          " 6. Write audit log entry
           TRY.
               zcl_gsp26_rule_writer=>log_audit_entry(
                 iv_req_id   = <r>-ReqId
@@ -968,7 +396,7 @@
                 text = |Audit log failed: { lx_audit_rej->get_text( ) }| ) ) TO reported-req.
           ENDTRY.
 
-          " 7. Cập nhật vào Database
+          " 7. Update request status to REJECTED
           MODIFY ENTITIES OF zir_conf_req_h IN LOCAL MODE
             ENTITY Req UPDATE FIELDS ( Status RejectReason RejectedBy RejectedAt )
             WITH VALUE #( ( %tky         = <r>-%tky
@@ -977,7 +405,7 @@
                             RejectedBy   = sy-uname
                             RejectedAt   = lv_now ) ).
 
-          " PUSH NOTIFICATION: THÔNG BÁO TỪ CHỐI CHO NGƯỜI TẠO REQUEST
+          " Send rejection push notification to the request creator
           DATA: lt_notif_rej TYPE /iwngw/if_notif_provider=>ty_t_notification,
                 ls_notif_rej TYPE /iwngw/if_notif_provider=>ty_s_notification,
                 lt_recip_rej TYPE /iwngw/if_notif_provider=>ty_t_notification_recipient,
@@ -1017,11 +445,10 @@
               ).
             CATCH /iwngw/cx_notification_api.
           ENDTRY.
-          " =============================================================
 
         ENDLOOP.
 
-        " 8. Đọc lại dữ liệu cuối cùng để trả về %param
+        " 8. Re-read to populate %param in the result
         READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
           ENTITY Req ALL FIELDS WITH CORRESPONDING #( keys )
           RESULT DATA(lt_final_reqs).
@@ -1030,7 +457,7 @@
                                                      %param = res ) ).
       ENDMETHOD.
 
-      METHOD submit.                                                                                                                                                                                        " Đọc headers + items 1 lần duy nhất (tránh N+1)
+      METHOD submit. " Read headers and items in one call to avoid N+1 queries
         READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
           ENTITY Req FIELDS ( ReqId Status ) WITH CORRESPONDING #( keys ) RESULT DATA(reqs)
           ENTITY Req BY \_Items FIELDS ( ReqId ) WITH CORRESPONDING #( keys ) RESULT DATA(all_items).
@@ -1104,16 +531,11 @@
         DATA lv_now TYPE timestampl.
         GET TIME STAMP FIELD lv_now.
 
-        DATA lv_ver_ss TYPE i.
-        DATA lv_ver_rt TYPE i.
-        DATA lv_ver_fi TYPE i.
-        DATA lv_ver_sd TYPE i.
-        DATA lt_promo_log TYPE STANDARD TABLE OF zauditlog WITH EMPTY KEY.
-        DATA ls_promo_log TYPE zauditlog.
-        DATA lv_ss_new_id TYPE sysuuid_x16.
-        DATA lv_rt_new_id TYPE sysuuid_x16.
-        DATA lv_fi_new_id TYPE sysuuid_x16.
-        DATA lv_sd_new_id TYPE sysuuid_x16.
+        DATA lv_prd_ver_ss TYPE i.
+        DATA lv_prd_ver_rt TYPE i.
+        DATA lv_prd_ver_fi TYPE i.
+        DATA lv_prd_ver_sd TYPE i.
+        DATA lt_promo_log  TYPE zcl_gsp26_rule_writer=>tt_audit_logs.
 
         READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
           ENTITY Req ALL FIELDS WITH CORRESPONDING #( keys )
@@ -1121,7 +543,7 @@
 
         LOOP AT reqs ASSIGNING FIELD-SYMBOL(<r>).
 
-          " Chấp nhận cả APPROVED và ACTIVE
+          " Both APPROVED and ACTIVE are valid starting states for promote
           IF <r>-Status <> gc_st_approved AND <r>-Status <> gc_st_active.
             APPEND VALUE #( %tky = <r>-%tky
               %msg = new_message_with_text(
@@ -1132,7 +554,7 @@
             CONTINUE.
           ENDIF.
 
-          " Xác định env tiếp theo
+          " Determine the next environment in the chain
           DATA(lv_next_env) = CONV zde_env_id( SWITCH #( condense( <r>-EnvId )
             WHEN 'DEV' THEN 'QAS'
             WHEN 'QAS' THEN 'PRD'
@@ -1148,485 +570,31 @@
             CONTINUE.
           ENDIF.
 
-          " ── Lấy version toàn cục của module ở PRD ──
+          " ── Get a single global version for each module when promoting to PRD ──
           IF lv_next_env = 'PRD'.
-            SELECT MAX( version_no ) FROM zmmsafestock  WHERE env_id = 'PRD' INTO @lv_ver_ss.
-            lv_ver_ss = lv_ver_ss + 1.
-
-            SELECT MAX( version_no ) FROM zmmrouteconf   WHERE env_id = 'PRD' INTO @lv_ver_rt.
-            lv_ver_rt = lv_ver_rt + 1.
-
-            SELECT MAX( version_no ) FROM zfilimitconf   WHERE env_id = 'PRD' INTO @lv_ver_fi.
-            lv_ver_fi = lv_ver_fi + 1.
-
-            SELECT MAX( version_no ) FROM zsd_price_conf WHERE env_id = 'PRD' INTO @lv_ver_sd.
-            lv_ver_sd = lv_ver_sd + 1.
+            lv_prd_ver_ss = zcl_gsp26_rule_version=>get_global_version( iv_table_name = 'ZMMSAFESTOCK'   iv_env_id = 'PRD' ).
+            lv_prd_ver_rt = zcl_gsp26_rule_version=>get_global_version( iv_table_name = 'ZMMROUTECONF'   iv_env_id = 'PRD' ).
+            lv_prd_ver_fi = zcl_gsp26_rule_version=>get_global_version( iv_table_name = 'ZFILIMITCONF'   iv_env_id = 'PRD' ).
+            lv_prd_ver_sd = zcl_gsp26_rule_version=>get_global_version( iv_table_name = 'ZSD_PRICE_CONF' iv_env_id = 'PRD' ).
           ENDIF.
 
-
-
-          " ── MM SafeStock: UPDATE the existing target-env row (same business key) ──
-          " Source: DEV row (req_id + env_id = current env).
-          " Target: row in next_env with same plant_id + mat_group.
-          DATA lv_ver_new TYPE i.
-          SELECT * FROM zmmsafestock
-            WHERE req_id = @<r>-ReqId AND env_id = @<r>-EnvId
-            INTO TABLE @DATA(lt_ss).
-          LOOP AT lt_ss ASSIGNING FIELD-SYMBOL(<ss>).
-            DATA lv_ss_target_id TYPE sysuuid_x16.
-            SELECT SINGLE item_id, min_qty FROM zmmsafestock
-              WHERE env_id   = @lv_next_env
-                AND plant_id = @<ss>-plant_id
-                AND mat_group = @<ss>-mat_group
-              INTO @DATA(ls_ss_tgt).
-            IF sy-subrc = 0.
-              lv_ss_target_id = ls_ss_tgt-item_id.
-              lv_ver_new = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_ss ELSE <ss>-version_no ).
-              UPDATE zmmsafestock SET
-                min_qty    = @<ss>-min_qty,
-                version_no = @lv_ver_new,
-                req_id     = @<r>-ReqId,
-                changed_by = @sy-uname,
-                changed_at = @lv_now
-              WHERE item_id = @lv_ss_target_id.
-              TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-              ls_promo_log-client      = sy-mandt.
-              ls_promo_log-req_id      = <r>-ReqId.
-              ls_promo_log-conf_id     = <r>-ConfId.
-              ls_promo_log-module_id   = 'MM'.
-              ls_promo_log-action_type = 'PROMOTE'.
-              ls_promo_log-table_name  = 'ZMMSAFESTOCK'.
-              ls_promo_log-env_id      = lv_next_env.
-              ls_promo_log-object_key  = lv_ss_target_id.
-              ls_promo_log-old_data    = |\{"MIN_QTY":"{ ls_ss_tgt-min_qty }"\}|.
-              ls_promo_log-new_data    = |\{"MIN_QTY":"{ <ss>-min_qty }"\}|.
-              ls_promo_log-changed_by  = sy-uname.
-              ls_promo_log-changed_at  = lv_now.
-              APPEND ls_promo_log TO lt_promo_log.
-              CLEAR ls_promo_log.
-            ELSE.
-              " CREATE propagation: row not in target env yet → INSERT
-              TRY. lv_ss_new_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-              lv_ver_new = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_ss ELSE <ss>-version_no ).
-              INSERT zmmsafestock FROM @( VALUE zmmsafestock(
-                client     = sy-mandt
-                item_id    = lv_ss_new_id
-                req_id     = <r>-ReqId
-                env_id     = lv_next_env
-                plant_id   = <ss>-plant_id
-                mat_group  = <ss>-mat_group
-                min_qty    = <ss>-min_qty
-                version_no = lv_ver_new
-                created_at = lv_now
-                changed_by = sy-uname
-                changed_at = lv_now ) ).
-              TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-              ls_promo_log-client      = sy-mandt.
-              ls_promo_log-req_id      = <r>-ReqId.
-              ls_promo_log-conf_id     = <r>-ConfId.
-              ls_promo_log-module_id   = 'MM'.
-              ls_promo_log-action_type = 'PROMOTE'.
-              ls_promo_log-table_name  = 'ZMMSAFESTOCK'.
-              ls_promo_log-env_id      = lv_next_env.
-              ls_promo_log-object_key  = lv_ss_new_id.
-              ls_promo_log-old_data    = '{}'.
-              ls_promo_log-new_data    = |\{"PLANT_ID":"{ <ss>-plant_id }","MAT_GROUP":"{ <ss>-mat_group }","MIN_QTY":"{ <ss>-min_qty }"\}|.
-              ls_promo_log-changed_by  = sy-uname.
-              ls_promo_log-changed_at  = lv_now.
-              APPEND ls_promo_log TO lt_promo_log.
-              CLEAR ls_promo_log.
-            ENDIF.
-            CLEAR lv_ss_target_id.
-          ENDLOOP.
-
-          " ── MM SafeStock: DELETE target-env rows for DELETE action ──
-          SELECT * FROM zmmsafestock_req
-            WHERE req_id = @<r>-ReqId
-              AND ( action_type = 'X' OR action_type = 'DELETE' )
-            INTO TABLE @DATA(lt_ss_del).
-          LOOP AT lt_ss_del ASSIGNING FIELD-SYMBOL(<ss_d>).
-            SELECT SINGLE item_id, min_qty FROM zmmsafestock
-              WHERE env_id    = @lv_next_env
-                AND plant_id  = @<ss_d>-old_plant_id
-                AND mat_group = @<ss_d>-old_mat_group
-              INTO @DATA(ls_ss_del_tgt).
-            IF sy-subrc = 0.
-              DELETE FROM zmmsafestock WHERE item_id = @ls_ss_del_tgt-item_id.
-              IF sy-dbcnt > 0.
-                TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-                ls_promo_log-client      = sy-mandt.
-                ls_promo_log-req_id      = <r>-ReqId.
-                ls_promo_log-conf_id     = <r>-ConfId.
-                ls_promo_log-module_id   = 'MM'.
-                ls_promo_log-action_type = 'PROMOTE'.
-                ls_promo_log-table_name  = 'ZMMSAFESTOCK'.
-                ls_promo_log-env_id      = lv_next_env.
-                ls_promo_log-object_key  = ls_ss_del_tgt-item_id.
-                ls_promo_log-old_data    = |\{"ENV_ID":"{ lv_next_env }","PLANT_ID":"{ <ss_d>-old_plant_id }","MAT_GROUP":"{ <ss_d>-old_mat_group }","MIN_QTY":"{ ls_ss_del_tgt-min_qty }"\}|.
-                ls_promo_log-new_data    = '{}'.
-                ls_promo_log-changed_by  = sy-uname.
-                ls_promo_log-changed_at  = lv_now.
-                APPEND ls_promo_log TO lt_promo_log.
-                CLEAR ls_promo_log.
-              ENDIF.
-            ENDIF.
-          ENDLOOP.
-
-          " ── MM Route: UPDATE the existing target-env row (same business key) ──
-          SELECT * FROM zmmrouteconf
-            WHERE req_id = @<r>-ReqId AND env_id = @<r>-EnvId
-            INTO TABLE @DATA(lt_rt).
-          LOOP AT lt_rt ASSIGNING FIELD-SYMBOL(<rt>).
-            DATA lv_rt_target_id TYPE sysuuid_x16.
-            SELECT SINGLE item_id, trans_mode, is_allowed, inspector_id FROM zmmrouteconf
-              WHERE env_id     = @lv_next_env
-                AND plant_id   = @<rt>-plant_id
-                AND send_wh    = @<rt>-send_wh
-                AND receive_wh = @<rt>-receive_wh
-              INTO @DATA(ls_rt_tgt).
-            IF sy-subrc = 0.
-              lv_rt_target_id = ls_rt_tgt-item_id.
-              lv_ver_new = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_rt ELSE <rt>-version_no ).
-              UPDATE zmmrouteconf SET
-                inspector_id = @<rt>-inspector_id,
-                trans_mode   = @<rt>-trans_mode,
-                is_allowed   = @<rt>-is_allowed,
-                version_no   = @lv_ver_new,
-                req_id       = @<r>-ReqId,
-                changed_by   = @sy-uname,
-                changed_at   = @lv_now
-              WHERE item_id = @lv_rt_target_id.
-              TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-              ls_promo_log-client      = sy-mandt.
-              ls_promo_log-req_id      = <r>-ReqId.
-              ls_promo_log-conf_id     = <r>-ConfId.
-              ls_promo_log-module_id   = 'MM'.
-              ls_promo_log-action_type = 'PROMOTE'.
-              ls_promo_log-table_name  = 'ZMMROUTECONF'.
-              ls_promo_log-env_id      = lv_next_env.
-              ls_promo_log-object_key  = lv_rt_target_id.
-              ls_promo_log-old_data    = |\{"TRANS_MODE":"{ ls_rt_tgt-trans_mode }","IS_ALLOWED":"{ ls_rt_tgt-is_allowed }","INSPECTOR_ID":"{ ls_rt_tgt-inspector_id }"\}|.
-              ls_promo_log-new_data    = |\{"TRANS_MODE":"{ <rt>-trans_mode }","IS_ALLOWED":"{ <rt>-is_allowed }","INSPECTOR_ID":"{ <rt>-inspector_id }"\}|.
-              ls_promo_log-changed_by  = sy-uname.
-              ls_promo_log-changed_at  = lv_now.
-              APPEND ls_promo_log TO lt_promo_log.
-              CLEAR ls_promo_log.
-            ELSE.
-              " CREATE propagation: route not in target env yet → INSERT
-              TRY. lv_rt_new_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-              lv_ver_new = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_rt ELSE <rt>-version_no ).
-              INSERT zmmrouteconf FROM @( VALUE zmmrouteconf(
-                client       = sy-mandt
-                item_id      = lv_rt_new_id
-                req_id       = <r>-ReqId
-                env_id       = lv_next_env
-                plant_id     = <rt>-plant_id
-                send_wh      = <rt>-send_wh
-                receive_wh   = <rt>-receive_wh
-                trans_mode   = <rt>-trans_mode
-                is_allowed   = <rt>-is_allowed
-                inspector_id = <rt>-inspector_id
-                version_no   = lv_ver_new
-                created_at   = lv_now
-                changed_by   = sy-uname
-                changed_at   = lv_now ) ).
-              TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-              ls_promo_log-client      = sy-mandt.
-              ls_promo_log-req_id      = <r>-ReqId.
-              ls_promo_log-conf_id     = <r>-ConfId.
-              ls_promo_log-module_id   = 'MM'.
-              ls_promo_log-action_type = 'PROMOTE'.
-              ls_promo_log-table_name  = 'ZMMROUTECONF'.
-              ls_promo_log-env_id      = lv_next_env.
-              ls_promo_log-object_key  = lv_rt_new_id.
-              ls_promo_log-old_data    = '{}'.
-              ls_promo_log-new_data    = |\{"PLANT_ID":"{ <rt>-plant_id }","SEND_WH":"{ <rt>-send_wh }","RECEIVE_WH":"{ <rt>-receive_wh }","TRANS_MODE":"{ <rt>-trans_mode }","IS_ALLOWED":"{ <rt>-is_allowed }"\}|.
-              ls_promo_log-changed_by  = sy-uname.
-              ls_promo_log-changed_at  = lv_now.
-              APPEND ls_promo_log TO lt_promo_log.
-              CLEAR ls_promo_log.
-            ENDIF.
-            CLEAR lv_rt_target_id.
-          ENDLOOP.
-
-          " ── MM Route: DELETE target-env rows for DELETE action ──
-          SELECT * FROM zmmrouteconf_req
-            WHERE req_id = @<r>-ReqId AND action_type = 'X'
-            INTO TABLE @DATA(lt_rt_del).
-          LOOP AT lt_rt_del ASSIGNING FIELD-SYMBOL(<rt_d>).
-            SELECT SINGLE item_id, trans_mode, is_allowed, inspector_id FROM zmmrouteconf
-              WHERE env_id     = @lv_next_env
-                AND plant_id   = @<rt_d>-old_plant_id
-                AND send_wh    = @<rt_d>-old_send_wh
-                AND receive_wh = @<rt_d>-old_receive_wh
-              INTO @DATA(ls_rt_del_tgt).
-            IF sy-subrc = 0.
-              DELETE FROM zmmrouteconf WHERE item_id = @ls_rt_del_tgt-item_id.
-              IF sy-dbcnt > 0.
-                TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-                ls_promo_log-client      = sy-mandt.
-                ls_promo_log-req_id      = <r>-ReqId.
-                ls_promo_log-conf_id     = <r>-ConfId.
-                ls_promo_log-module_id   = 'MM'.
-                ls_promo_log-action_type = 'PROMOTE'.
-                ls_promo_log-table_name  = 'ZMMROUTECONF'.
-                ls_promo_log-env_id      = lv_next_env.
-                ls_promo_log-object_key  = ls_rt_del_tgt-item_id.
-                ls_promo_log-old_data    =
-                  |\{"ENV_ID":"{ lv_next_env }","PLANT_ID":"{ <rt_d>-old_plant_id }",| &&
-                  |"SEND_WH":"{ <rt_d>-old_send_wh }","RECEIVE_WH":"{ <rt_d>-old_receive_wh }",| &&
-                  |"TRANS_MODE":"{ ls_rt_del_tgt-trans_mode }","IS_ALLOWED":"{ ls_rt_del_tgt-is_allowed }",| &&
-                  |"INSPECTOR_ID":"{ ls_rt_del_tgt-inspector_id }"\}|.
-                ls_promo_log-new_data    = '{}'.
-                ls_promo_log-changed_by  = sy-uname.
-                ls_promo_log-changed_at  = lv_now.
-                APPEND ls_promo_log TO lt_promo_log.
-                CLEAR ls_promo_log.
-              ENDIF.
-            ENDIF.
-          ENDLOOP.
-
-          " ── FI Limit: UPDATE the existing target-env row (same business key) ──
-          SELECT * FROM zfilimitconf
-            WHERE req_id = @<r>-ReqId AND env_id = @<r>-EnvId
-            INTO TABLE @DATA(lt_fi).
-          LOOP AT lt_fi ASSIGNING FIELD-SYMBOL(<fi>).
-            DATA lv_fi_target_id TYPE sysuuid_x16.
-            SELECT SINGLE item_id, auto_appr_lim, currency FROM zfilimitconf
-              WHERE env_id       = @lv_next_env
-                AND expense_type = @<fi>-expense_type
-                AND gl_account   = @<fi>-gl_account
-              INTO @DATA(ls_fi_tgt).
-            IF sy-subrc = 0.
-              lv_fi_target_id = ls_fi_tgt-item_id.
-              lv_ver_new = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_fi ELSE <fi>-version_no ).
-              UPDATE zfilimitconf SET
-                auto_appr_lim = @<fi>-auto_appr_lim,
-                currency      = @<fi>-currency,
-                version_no    = @lv_ver_new,
-                req_id        = @<r>-ReqId,
-                changed_by    = @sy-uname,
-                changed_at    = @lv_now
-              WHERE item_id = @lv_fi_target_id.
-              TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-              ls_promo_log-client      = sy-mandt.
-              ls_promo_log-req_id      = <r>-ReqId.
-              ls_promo_log-conf_id     = <r>-ConfId.
-              ls_promo_log-module_id   = 'FI'.
-              ls_promo_log-action_type = 'PROMOTE'.
-              ls_promo_log-table_name  = 'ZFILIMITCONF'.
-              ls_promo_log-env_id      = lv_next_env.
-              ls_promo_log-object_key  = lv_fi_target_id.
-              ls_promo_log-old_data    = |\{"AUTO_APPR_LIM":"{ ls_fi_tgt-auto_appr_lim }","CURRENCY":"{ ls_fi_tgt-currency }"\}|.
-              ls_promo_log-new_data    = |\{"AUTO_APPR_LIM":"{ <fi>-auto_appr_lim }","CURRENCY":"{ <fi>-currency }"\}|.
-              ls_promo_log-changed_by  = sy-uname.
-              ls_promo_log-changed_at  = lv_now.
-              APPEND ls_promo_log TO lt_promo_log.
-              CLEAR ls_promo_log.
-            ELSE.
-              " CREATE propagation: limit not in target env yet → INSERT
-              TRY. lv_fi_new_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-              lv_ver_new = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_fi ELSE <fi>-version_no ).
-              INSERT zfilimitconf FROM @( VALUE zfilimitconf(
-                client        = sy-mandt
-                item_id       = lv_fi_new_id
-                req_id        = <r>-ReqId
-                env_id        = lv_next_env
-                expense_type  = <fi>-expense_type
-                gl_account    = <fi>-gl_account
-                auto_appr_lim = <fi>-auto_appr_lim
-                currency      = <fi>-currency
-                version_no    = lv_ver_new
-                created_at    = lv_now
-                changed_by    = sy-uname
-                changed_at    = lv_now ) ).
-              TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-              ls_promo_log-client      = sy-mandt.
-              ls_promo_log-req_id      = <r>-ReqId.
-              ls_promo_log-conf_id     = <r>-ConfId.
-              ls_promo_log-module_id   = 'FI'.
-              ls_promo_log-action_type = 'PROMOTE'.
-              ls_promo_log-table_name  = 'ZFILIMITCONF'.
-              ls_promo_log-env_id      = lv_next_env.
-              ls_promo_log-object_key  = lv_fi_new_id.
-              ls_promo_log-old_data    = '{}'.
-              ls_promo_log-new_data    = |\{"EXPENSE_TYPE":"{ <fi>-expense_type }","GL_ACCOUNT":"{ <fi>-gl_account }","AUTO_APPR_LIM":"{ <fi>-auto_appr_lim }","CURRENCY":"{ <fi>-currency }"\}|.
-              ls_promo_log-changed_by  = sy-uname.
-              ls_promo_log-changed_at  = lv_now.
-              APPEND ls_promo_log TO lt_promo_log.
-              CLEAR ls_promo_log.
-            ENDIF.
-            CLEAR lv_fi_target_id.
-          ENDLOOP.
-
-          " ── FI Limit: DELETE target-env rows for DELETE action ──
-          SELECT * FROM zfilimitreq
-            WHERE req_id = @<r>-ReqId AND action_type = 'X'
-            INTO TABLE @DATA(lt_fi_del).
-          LOOP AT lt_fi_del ASSIGNING FIELD-SYMBOL(<fi_d>).
-            SELECT SINGLE item_id, auto_appr_lim, currency FROM zfilimitconf
-              WHERE env_id       = @lv_next_env
-                AND expense_type = @<fi_d>-old_expense_type
-                AND gl_account   = @<fi_d>-old_gl_account
-              INTO @DATA(ls_fi_del_tgt).
-            IF sy-subrc = 0.
-              DELETE FROM zfilimitconf WHERE item_id = @ls_fi_del_tgt-item_id.
-              IF sy-dbcnt > 0.
-                TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-                ls_promo_log-client      = sy-mandt.
-                ls_promo_log-req_id      = <r>-ReqId.
-                ls_promo_log-conf_id     = <r>-ConfId.
-                ls_promo_log-module_id   = 'FI'.
-                ls_promo_log-action_type = 'PROMOTE'.
-                ls_promo_log-table_name  = 'ZFILIMITCONF'.
-                ls_promo_log-env_id      = lv_next_env.
-                ls_promo_log-object_key  = ls_fi_del_tgt-item_id.
-                ls_promo_log-old_data    =
-                  |\{"ENV_ID":"{ lv_next_env }","EXPENSE_TYPE":"{ <fi_d>-old_expense_type }",| &&
-                  |"GL_ACCOUNT":"{ <fi_d>-old_gl_account }","AUTO_APPR_LIM":"{ ls_fi_del_tgt-auto_appr_lim }",| &&
-                  |"CURRENCY":"{ ls_fi_del_tgt-currency }"\}|.
-                ls_promo_log-new_data    = '{}'.
-                ls_promo_log-changed_by  = sy-uname.
-                ls_promo_log-changed_at  = lv_now.
-                APPEND ls_promo_log TO lt_promo_log.
-                CLEAR ls_promo_log.
-              ENDIF.
-            ENDIF.
-          ENDLOOP.
-
-          " ── SD Price: UPDATE the existing target-env row (same business key) ──
-          SELECT * FROM zsd_price_conf
-            WHERE req_id = @<r>-ReqId AND env_id = @<r>-EnvId
-            INTO TABLE @DATA(lt_sd).
-          LOOP AT lt_sd ASSIGNING FIELD-SYMBOL(<sd>).
-            DATA lv_sd_target_id TYPE sysuuid_x16.
-            SELECT SINGLE item_id, max_discount, min_order_val, approver_grp, currency, valid_from, valid_to
-              FROM zsd_price_conf
-              WHERE env_id       = @lv_next_env
-                AND branch_id    = @<sd>-branch_id
-                AND cust_group   = @<sd>-cust_group
-                AND material_grp = @<sd>-material_grp
-              INTO @DATA(ls_sd_tgt).
-            IF sy-subrc = 0.
-              lv_sd_target_id = ls_sd_tgt-item_id.
-              lv_ver_new = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_sd ELSE <sd>-version_no ).
-              UPDATE zsd_price_conf SET
-                max_discount  = @<sd>-max_discount,
-                min_order_val = @<sd>-min_order_val,
-                approver_grp  = @<sd>-approver_grp,
-                currency      = @<sd>-currency,
-                valid_from    = @<sd>-valid_from,
-                valid_to      = @<sd>-valid_to,
-                version_no    = @lv_ver_new,
-                req_id        = @<r>-ReqId,
-                changed_by    = @sy-uname,
-                changed_at    = @lv_now
-              WHERE item_id = @lv_sd_target_id.
-              TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-              ls_promo_log-client      = sy-mandt.
-              ls_promo_log-req_id      = <r>-ReqId.
-              ls_promo_log-conf_id     = <r>-ConfId.
-              ls_promo_log-module_id   = 'SD'.
-              ls_promo_log-action_type = 'PROMOTE'.
-              ls_promo_log-table_name  = 'ZSD_PRICE_CONF'.
-              ls_promo_log-env_id      = lv_next_env.
-              ls_promo_log-object_key  = lv_sd_target_id.
-              ls_promo_log-old_data    =
-                |\{"MAX_DISCOUNT":"{ ls_sd_tgt-max_discount }","MIN_ORDER_VAL":"{ ls_sd_tgt-min_order_val }",| &&
-                |"APPROVER_GRP":"{ ls_sd_tgt-approver_grp }","CURRENCY":"{ ls_sd_tgt-currency }",| &&
-                |"VALID_FROM":"{ ls_sd_tgt-valid_from }","VALID_TO":"{ ls_sd_tgt-valid_to }"\}|.
-              ls_promo_log-new_data    =
-                |\{"MAX_DISCOUNT":"{ <sd>-max_discount }","MIN_ORDER_VAL":"{ <sd>-min_order_val }",| &&
-                |"APPROVER_GRP":"{ <sd>-approver_grp }","CURRENCY":"{ <sd>-currency }",| &&
-                |"VALID_FROM":"{ <sd>-valid_from }","VALID_TO":"{ <sd>-valid_to }"\}|.
-              ls_promo_log-changed_by  = sy-uname.
-              ls_promo_log-changed_at  = lv_now.
-              APPEND ls_promo_log TO lt_promo_log.
-              CLEAR ls_promo_log.
-            ELSE.
-              " CREATE propagation: price rule not in target env yet → INSERT
-              TRY. lv_sd_new_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-              lv_ver_new = COND #( WHEN lv_next_env = 'PRD' THEN lv_ver_sd ELSE <sd>-version_no ).
-              INSERT zsd_price_conf FROM @( VALUE zsd_price_conf(
-                client        = sy-mandt
-                item_id       = lv_sd_new_id
-                req_id        = <r>-ReqId
-                env_id        = lv_next_env
-                branch_id     = <sd>-branch_id
-                cust_group    = <sd>-cust_group
-                material_grp  = <sd>-material_grp
-                max_discount  = <sd>-max_discount
-                min_order_val = <sd>-min_order_val
-                approver_grp  = <sd>-approver_grp
-                currency      = <sd>-currency
-                valid_from    = <sd>-valid_from
-                valid_to      = <sd>-valid_to
-                version_no    = lv_ver_new
-                created_at    = lv_now
-                changed_by    = sy-uname
-                changed_at    = lv_now ) ).
-              TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-              ls_promo_log-client      = sy-mandt.
-              ls_promo_log-req_id      = <r>-ReqId.
-              ls_promo_log-conf_id     = <r>-ConfId.
-              ls_promo_log-module_id   = 'SD'.
-              ls_promo_log-action_type = 'PROMOTE'.
-              ls_promo_log-table_name  = 'ZSD_PRICE_CONF'.
-              ls_promo_log-env_id      = lv_next_env.
-              ls_promo_log-object_key  = lv_sd_new_id.
-              ls_promo_log-old_data    = '{}'.
-              ls_promo_log-new_data    =
-                |\{"BRANCH_ID":"{ <sd>-branch_id }","CUST_GROUP":"{ <sd>-cust_group }",| &&
-                |"MATERIAL_GRP":"{ <sd>-material_grp }","MAX_DISCOUNT":"{ <sd>-max_discount }",| &&
-                |"MIN_ORDER_VAL":"{ <sd>-min_order_val }","APPROVER_GRP":"{ <sd>-approver_grp }",| &&
-                |"CURRENCY":"{ <sd>-currency }","VALID_FROM":"{ <sd>-valid_from }",| &&
-                |"VALID_TO":"{ <sd>-valid_to }"\}|.
-              ls_promo_log-changed_by  = sy-uname.
-              ls_promo_log-changed_at  = lv_now.
-              APPEND ls_promo_log TO lt_promo_log.
-              CLEAR ls_promo_log.
-            ENDIF.
-            CLEAR lv_sd_target_id.
-          ENDLOOP.
-
-          " ── SD Price: DELETE target-env rows for DELETE action ──
-          SELECT * FROM zsd_price_req
-            WHERE req_id = @<r>-ReqId AND action_type = 'X'
-            INTO TABLE @DATA(lt_sd_del).
-          LOOP AT lt_sd_del ASSIGNING FIELD-SYMBOL(<sd_d>).
-            SELECT SINGLE item_id, max_discount, min_order_val, approver_grp, currency, valid_from, valid_to
-              FROM zsd_price_conf
-              WHERE env_id       = @lv_next_env
-                AND branch_id    = @<sd_d>-old_branch_id
-                AND cust_group   = @<sd_d>-old_cust_group
-                AND material_grp = @<sd_d>-old_material_grp
-              INTO @DATA(ls_sd_del_tgt).
-            IF sy-subrc = 0.
-              DELETE FROM zsd_price_conf WHERE item_id = @ls_sd_del_tgt-item_id.
-              IF sy-dbcnt > 0.
-                TRY. ls_promo_log-log_id = cl_system_uuid=>create_uuid_x16_static( ). CATCH cx_uuid_error. ENDTRY.
-                ls_promo_log-client      = sy-mandt.
-                ls_promo_log-req_id      = <r>-ReqId.
-                ls_promo_log-conf_id     = <r>-ConfId.
-                ls_promo_log-module_id   = 'SD'.
-                ls_promo_log-action_type = 'PROMOTE'.
-                ls_promo_log-table_name  = 'ZSD_PRICE_CONF'.
-                ls_promo_log-env_id      = lv_next_env.
-                ls_promo_log-object_key  = ls_sd_del_tgt-item_id.
-                ls_promo_log-old_data    =
-                  |\{"ENV_ID":"{ lv_next_env }","BRANCH_ID":"{ <sd_d>-old_branch_id }",| &&
-                  |"CUST_GROUP":"{ <sd_d>-old_cust_group }","MATERIAL_GRP":"{ <sd_d>-old_material_grp }",| &&
-                  |"MAX_DISCOUNT":"{ ls_sd_del_tgt-max_discount }","MIN_ORDER_VAL":"{ ls_sd_del_tgt-min_order_val }",| &&
-                  |"APPROVER_GRP":"{ ls_sd_del_tgt-approver_grp }","CURRENCY":"{ ls_sd_del_tgt-currency }",| &&
-                  |"VALID_FROM":"{ ls_sd_del_tgt-valid_from }","VALID_TO":"{ ls_sd_del_tgt-valid_to }"\}|.
-                ls_promo_log-new_data    = '{}'.
-                ls_promo_log-changed_by  = sy-uname.
-                ls_promo_log-changed_at  = lv_now.
-                APPEND ls_promo_log TO lt_promo_log.
-                CLEAR ls_promo_log.
-              ENDIF.
-            ENDIF.
-          ENDLOOP.
+          " ── Promote all modules to target env ──
+          APPEND LINES OF zcl_gsp26_rule_snapshot=>promote_mmss(
+            iv_req_id = <r>-ReqId iv_conf_id = <r>-ConfId
+            iv_src_env_id = <r>-EnvId iv_tgt_env_id = lv_next_env
+            iv_prd_ver = lv_prd_ver_ss iv_now = lv_now iv_changed_by = sy-uname ) TO lt_promo_log.
+          APPEND LINES OF zcl_gsp26_rule_snapshot=>promote_mmroute(
+            iv_req_id = <r>-ReqId iv_conf_id = <r>-ConfId
+            iv_src_env_id = <r>-EnvId iv_tgt_env_id = lv_next_env
+            iv_prd_ver = lv_prd_ver_rt iv_now = lv_now iv_changed_by = sy-uname ) TO lt_promo_log.
+          APPEND LINES OF zcl_gsp26_rule_snapshot=>promote_fi(
+            iv_req_id = <r>-ReqId iv_conf_id = <r>-ConfId
+            iv_src_env_id = <r>-EnvId iv_tgt_env_id = lv_next_env
+            iv_prd_ver = lv_prd_ver_fi iv_now = lv_now iv_changed_by = sy-uname ) TO lt_promo_log.
+          APPEND LINES OF zcl_gsp26_rule_snapshot=>promote_sd(
+            iv_req_id = <r>-ReqId iv_conf_id = <r>-ConfId
+            iv_src_env_id = <r>-EnvId iv_tgt_env_id = lv_next_env
+            iv_prd_ver = lv_prd_ver_sd iv_now = lv_now iv_changed_by = sy-uname ) TO lt_promo_log.
 
           " ── Update request header: move env_id to next env ──
           " EnvId is a RAP key field — cannot change via MODIFY ENTITIES UPDATE.
@@ -1647,9 +615,7 @@
 
         ENDLOOP.
 
-        IF lt_promo_log IS NOT INITIAL.
-          INSERT zauditlog FROM TABLE @lt_promo_log.
-        ENDIF.
+        zcl_gsp26_rule_writer=>flush_audit_logs( lt_promo_log ).
 
         result = VALUE #( FOR r IN reqs ( %tky = r-%tky ) ).
       ENDMETHOD.
@@ -1733,7 +699,6 @@
       ENDMETHOD.
 
       METHOD createRequest.
-        " Define variables
         DATA lv_now              TYPE timestampl.
         DATA lv_conf_id_x16      TYPE sysuuid_x16.
         DATA lv_uuid_c36         TYPE sysuuid_c36.
@@ -1810,13 +775,13 @@
             CONTINUE.
           ENDIF.
 
-          " Env
+          " Default to DEV if no target env provided
           lv_env = COND #(
             WHEN ls_key-%param-TargetEnvId IS INITIAL
             THEN 'DEV'
             ELSE ls_key-%param-TargetEnvId ).
 
-          " Create header + item
+          " Create request header and one item in a single MODIFY call
           MODIFY ENTITIES OF zir_conf_req_h
             IN LOCAL MODE
             ENTITY Req
@@ -1853,12 +818,11 @@
             CONTINUE.
           ENDIF.
 
-          " Get req_id + req_item_id through map
+          " Get the new req_id and req_item_id from the mapped result
           lv_req_id_x16      = ls_mapped-req[ 1 ]-%key-ReqId.
           lv_req_item_id_x16 = ls_mapped-item[ 1 ]-%key-ReqItemId.
 
-
-          " Return result
+          " Convert req_id to C36 and resolve the target app name for navigation
           cl_system_uuid=>convert_uuid_x16_static(
             EXPORTING uuid     = lv_req_id_x16
             IMPORTING uuid_c36 = lv_req_id_c36 ).
@@ -1917,7 +881,7 @@
 
     CLASS lhc_Item IMPLEMENTATION.
       METHOD get_instance_features.
-        " Đọc Status của Header cha thông qua association _Header
+        " Read parent header status via _Header association
         READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
           ENTITY Item BY \_Header
             FIELDS ( Status )
@@ -1925,7 +889,7 @@
           RESULT DATA(lt_headers).
 
         LOOP AT keys ASSIGNING FIELD-SYMBOL(<key>).
-          " Tìm header cha tương ứng
+          " Find the matching parent header
           READ TABLE lt_headers ASSIGNING FIELD-SYMBOL(<hdr>)
             WITH KEY %tky-%key = <key>-%key BINARY SEARCH.
           IF sy-subrc <> 0.
@@ -1934,7 +898,7 @@
 
           DATA(lv_status) = COND zde_requ_status( WHEN <hdr> IS ASSIGNED THEN condense( <hdr>-Status ) ELSE '' ).
 
-          " Chỉ cho phép edit/delete item khi Header đang ở DRAFT hoặc ROLLED_BACK
+          " Items can only be edited or deleted when the parent request is DRAFT or ROLLED_BACK
           DATA(lv_upd_del) = COND #(
             WHEN lv_status = 'DRAFT' OR lv_status = 'ROLLED_BACK'
               THEN if_abap_behv=>fc-o-enabled
