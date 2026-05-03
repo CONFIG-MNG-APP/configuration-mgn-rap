@@ -131,7 +131,7 @@
 
           CASE condense( ls_req-Status ).
 
-            WHEN gc_st_draft OR gc_st_rolled_back.
+            WHEN gc_st_draft OR gc_st_rejected.
               lv_submit  = if_abap_behv=>fc-o-enabled.
               lv_update  = if_abap_behv=>fc-o-enabled.
               lv_delete  = if_abap_behv=>fc-o-enabled.
@@ -148,7 +148,7 @@
               lv_promote  = if_abap_behv=>fc-o-enabled.
               lv_rollback = if_abap_behv=>fc-o-enabled.
 
-            WHEN gc_st_rejected.
+            WHEN gc_st_rolled_back.
 
           ENDCASE.
 

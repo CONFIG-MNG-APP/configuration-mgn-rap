@@ -36,7 +36,7 @@
       rv_allowed = abap_false.
 
       CASE iv_current_status.
-        WHEN cv_draft.
+        WHEN cv_draft OR cv_rejected.
           IF iv_next_status = cv_submitted. rv_allowed = abap_true. ENDIF.
 
         WHEN cv_submitted.
@@ -56,3 +56,4 @@
     ENDMETHOD.
 
   ENDCLASS.
+
