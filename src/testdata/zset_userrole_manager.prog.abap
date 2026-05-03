@@ -1,53 +1,31 @@
 *&---------------------------------------------------------------------*
 *& Report zset_userrole_manager
 *&---------------------------------------------------------------------*
-*&
-*&---------------------------------------------------------------------*
 REPORT zset_userrole_manager.
 
-CONSTANTS: lc_user_id   TYPE syuname VALUE 'DEV-056',
-           lc_role      TYPE zde_role_level VALUE 'IT ADMIN',
-           lc_fullname  TYPE c LENGTH 50 VALUE 'DEV-056',
-           lc_module_id TYPE zde_module_id VALUE 'ALL'.
+CONSTANTS: lc_user_id   TYPE syuname        VALUE 'DEV-056',
+           lc_fullname  TYPE c LENGTH 50    VALUE 'Quý Hoàng',
+           lc_module_id TYPE zde_module_id  VALUE 'ALL',
+           lc_role      TYPE zde_role_level VALUE 'MANAGER'.
 
-DATA ls_role TYPE zuserrole.
+" Delete all existing rows for this user to avoid stale compound key entries
+DELETE FROM zuserrole WHERE user_id = @lc_user_id.
 
-" Check if the user already exists
-SELECT SINGLE * FROM zuserrole
-  WHERE user_id = @lc_user_id
-  INTO @ls_role.
+" Insert fresh record with correct compound key
+DATA(ls_role) = VALUE zuserrole(
+  user_id    = lc_user_id
+  fullname   = lc_fullname
+  module_id  = lc_module_id
+  role_level = lc_role
+  is_active  = abap_true
+  org_access = '*' ).
+
+INSERT zuserrole FROM @ls_role.
 
 IF sy-subrc = 0.
-  " User exists — update role_level and ensure is_active = true
-  UPDATE zuserrole
-    SET role_level = @lc_role,
-        is_active  = @abap_true
-    WHERE user_id = @lc_user_id.
-
-  IF sy-subrc = 0.
-    COMMIT WORK.
-    WRITE: / |OK — User { lc_user_id } updated: role_level = '{ lc_role }'.|.
-  ELSE.
-    ROLLBACK WORK.
-    WRITE: / |ERROR — UPDATE failed. sy-subrc = { sy-subrc }.|.
-  ENDIF.
-
+  COMMIT WORK.
+  WRITE: / |OK — { lc_user_id } ({ lc_fullname }) → module={ lc_module_id }, role={ lc_role }.|.
 ELSE.
-  " User does not exist — insert a new record
-  ls_role-user_id    = lc_user_id.
-  ls_role-fullname   = lc_fullname.
-  ls_role-module_id  = lc_module_id.
-  ls_role-role_level = lc_role.
-  ls_role-is_active  = abap_true.
-  ls_role-org_access = '*'.
-
-  INSERT zuserrole FROM @ls_role.
-
-  IF sy-subrc = 0.
-    COMMIT WORK.
-    WRITE: / |OK — User { lc_user_id } inserted with role_level = '{ lc_role }'.|.
-  ELSE.
-    ROLLBACK WORK.
-    WRITE: / |ERROR — INSERT failed. sy-subrc = { sy-subrc }.|.
-  ENDIF.
+  ROLLBACK WORK.
+  WRITE: / |ERROR — INSERT failed. sy-subrc = { sy-subrc }.|.
 ENDIF.

@@ -257,6 +257,16 @@
             ENTITY Req UPDATE FIELDS ( Status ApprovedBy ApprovedAt )
             WITH VALUE #( ( %tky = <r>-%tky Status = gc_st_approved ApprovedBy = sy-uname ApprovedAt = lv_now ) ).
 
+          " Send email notification to the request creator
+          zcl_gsp26_mail_sender=>send_notification(
+            iv_event        = zcl_gsp26_mail_sender=>gc_ev_approved
+            iv_req_id       = <r>-ReqId
+            iv_req_title    = CONV #( <r>-ReqTitle )
+            iv_module_id    = CONV #( <r>-ModuleId )
+            iv_env_id       = CONV #( <r>-EnvId )
+            iv_creator      = <r>-CreatedBy
+            iv_triggered_by = sy-uname ).
+
           " Phase 3: WRITE-BACK — delegate each module to zcl_gsp26_rule_writer
           APPEND LINES OF zcl_gsp26_rule_writer=>write_back_mmss(
             iv_req_id = <r>-ReqId iv_env_id = CONV #( lc_env_dev )
@@ -405,6 +415,17 @@
                             RejectedBy   = sy-uname
                             RejectedAt   = lv_now ) ).
 
+          " Send email notification to the request creator
+          zcl_gsp26_mail_sender=>send_notification(
+            iv_event        = zcl_gsp26_mail_sender=>gc_ev_rejected
+            iv_req_id       = <r>-ReqId
+            iv_req_title    = CONV #( <r>-ReqTitle )
+            iv_module_id    = CONV #( <r>-ModuleId )
+            iv_env_id       = CONV #( <r>-EnvId )
+            iv_creator      = <r>-CreatedBy
+            iv_triggered_by = sy-uname
+            iv_reason       = CONV #( lv_reason ) ).
+
           " Send rejection push notification to the request creator
           DATA: lt_notif_rej TYPE /iwngw/if_notif_provider=>ty_t_notification,
                 ls_notif_rej TYPE /iwngw/if_notif_provider=>ty_s_notification,
@@ -459,7 +480,7 @@
 
       METHOD submit. " Read headers and items in one call to avoid N+1 queries
         READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
-          ENTITY Req FIELDS ( ReqId Status ) WITH CORRESPONDING #( keys ) RESULT DATA(reqs)
+          ENTITY Req ALL FIELDS WITH CORRESPONDING #( keys ) RESULT DATA(reqs)
           ENTITY Req BY \_Items FIELDS ( ReqId ) WITH CORRESPONDING #( keys ) RESULT DATA(all_items).
 
         LOOP AT reqs ASSIGNING FIELD-SYMBOL(<r>).
@@ -486,6 +507,16 @@
           MODIFY ENTITIES OF zir_conf_req_h IN LOCAL MODE ENTITY Req
             UPDATE FIELDS ( Status )
             WITH VALUE #( ( %tky = <r>-%tky Status = gc_st_submitted ) ).
+
+          " Send email notification to all managers for this module
+          zcl_gsp26_mail_sender=>send_notification(
+            iv_event        = zcl_gsp26_mail_sender=>gc_ev_submitted
+            iv_req_id       = <r>-ReqId
+            iv_req_title    = CONV #( <r>-ReqTitle )
+            iv_module_id    = CONV #( <r>-ModuleId )
+            iv_env_id       = CONV #( <r>-EnvId )
+            iv_creator      = <r>-CreatedBy
+            iv_triggered_by = sy-uname ).
         ENDLOOP.
         result = VALUE #( FOR r IN reqs ( %tky = r-%tky ) ).
       ENDMETHOD.
@@ -613,6 +644,16 @@
             WHERE req_id = @<r>-ReqId
               AND env_id  = @<r>-EnvId.
 
+          " Send email notification to creator and managers
+          zcl_gsp26_mail_sender=>send_notification(
+            iv_event        = zcl_gsp26_mail_sender=>gc_ev_promoted
+            iv_req_id       = <r>-ReqId
+            iv_req_title    = CONV #( <r>-ReqTitle )
+            iv_module_id    = CONV #( <r>-ModuleId )
+            iv_env_id       = CONV #( lv_next_env )
+            iv_creator      = <r>-CreatedBy
+            iv_triggered_by = sy-uname ).
+
         ENDLOOP.
 
         zcl_gsp26_rule_writer=>flush_audit_logs( lt_promo_log ).
@@ -692,6 +733,16 @@
                 changed_at = @lv_now
             WHERE req_id = @<r>-ReqId
               AND env_id  = @<r>-EnvId.
+
+          " Send email notification to creator and managers
+          zcl_gsp26_mail_sender=>send_notification(
+            iv_event        = zcl_gsp26_mail_sender=>gc_ev_rolled_back
+            iv_req_id       = <r>-ReqId
+            iv_req_title    = CONV #( <r>-ReqTitle )
+            iv_module_id    = CONV #( <r>-ModuleId )
+            iv_env_id       = CONV #( <r>-EnvId )
+            iv_creator      = <r>-CreatedBy
+            iv_triggered_by = sy-uname ).
 
         ENDLOOP.
 
