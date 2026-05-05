@@ -3,8 +3,8 @@
 *&---------------------------------------------------------------------*
 REPORT zset_userrole_manager.
 
-CONSTANTS: lc_user_id   TYPE syuname        VALUE 'DEV-056',
-           lc_fullname  TYPE c LENGTH 50    VALUE 'Quý Hoàng',
+CONSTANTS: lc_user_id   TYPE syuname        VALUE 'DEV-103',
+           lc_fullname  TYPE c LENGTH 50    VALUE 'DEV-103',
            lc_module_id TYPE zde_module_id  VALUE 'ALL',
            lc_role      TYPE zde_role_level VALUE 'MANAGER'.
 

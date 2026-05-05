@@ -1,0 +1,23 @@
+managed implementation in class zbp_i_user_mail unique;
+strict ( 2 );
+
+define behavior for ZI_USER_MAIL alias UserMail
+persistent table zusermail
+lock master
+authorization master ( global )
+{
+  field ( readonly : update ) UserId;
+  field ( mandatory )         Email;
+
+  create;
+  update;
+  delete;
+
+  validation validateEmail on save { create; update; field Email; }
+
+  mapping for zusermail
+  {
+    UserId = user_id;
+    Email  = email;
+  }
+}

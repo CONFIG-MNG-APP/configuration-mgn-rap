@@ -1,0 +1,6 @@
+@EndUserText.label: 'User Management Service Definition'
+define service ZSD_USER_MGMT {
+  expose ZC_USER_ROLE as UserRole;
+  expose ZC_USER_MAIL as UserMail;
+  expose ZC_VH_MODULE as Module;
+}

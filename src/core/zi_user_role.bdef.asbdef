@@ -1,0 +1,30 @@
+managed implementation in class zbp_i_user_role unique;
+strict ( 2 );
+
+define behavior for ZI_USER_ROLE alias UserRole
+persistent table zuserrole
+lock master
+authorization master ( global )
+{
+  field ( readonly : update ) UserId, ModuleId;
+  field ( mandatory )         RoleLevel;
+
+  create;
+  update;
+  delete;
+
+  determination setFullname on modify { create; field UserId; }
+
+  validation validateSoD    on save { create; update; field RoleLevel; }
+  validation validateUserId on save { create; }
+
+  mapping for zuserrole
+  {
+    UserId    = user_id;
+    ModuleId  = module_id;
+    RoleLevel = role_level;
+    Fullname  = fullname;
+    IsActive  = is_active;
+    OrgAccess = org_access;
+  }
+}
