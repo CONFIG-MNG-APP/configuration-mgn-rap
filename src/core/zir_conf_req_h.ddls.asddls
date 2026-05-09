@@ -55,8 +55,6 @@ define root view entity ZIR_CONF_REQ_H
       _Env
 }
 where
-     h.created_by = $session.user 
-  or r.role_level = 'MANAGER'     
-  or r.role_level = 'IT ADMIN'    
-
-  
+     h.created_by = $session.user
+  or r.role_level = 'MANAGER'
+  or r.role_level = 'IT ADMIN'

@@ -1,56 +1,88 @@
 CLASS zcl_gsp26_req_notif_prv DEFINITION
   PUBLIC
   FINAL
-  CREATE PUBLIC .
+  CREATE PUBLIC.
 
   PUBLIC SECTION.
-    INTERFACES /iwngw/if_notif_provider .
+    INTERFACES /iwngw/if_notif_provider.
+
+    " Notification type keys — referenced by the caller (zbp_ir_conf_req_h)
+    " so they stay in sync without duplicating string literals.
+    CONSTANTS:
+      gc_type_approved  TYPE string VALUE 'REQ_APPROVED',
+      gc_type_rejected  TYPE string VALUE 'REQ_REJECTED',
+      gc_type_submitted TYPE string VALUE 'REQ_SUBMITTED'.
+
+    " Notification type version — single source of truth
+    CONSTANTS:
+      gc_type_version TYPE string VALUE '1'.
+
+    " Parameter name for the request title placeholder used in templates
+    CONSTANTS:
+      gc_param_req_title TYPE string VALUE 'ReqTitle'.
+
   PROTECTED SECTION.
   PRIVATE SECTION.
 ENDCLASS.
 
+
 CLASS zcl_gsp26_req_notif_prv IMPLEMENTATION.
 
   METHOD /iwngw/if_notif_provider~get_notification_parameters.
-    " Đã sửa iv_type_id -> iv_type_key
-    IF iv_type_key = 'REQ_APPROVED' OR iv_type_key = 'REQ_REJECTED' OR iv_type_key = 'REQ_SUBMITTED'.
-      APPEND VALUE #( name = 'ReqTitle'
-                      type = /iwngw/if_notif_provider=>gcs_parameter_types-type_string
-                      is_sensitive = abap_false ) TO et_parameter.
-    ENDIF.
+    " Register the {ReqTitle} parameter for all three notification types.
+    " The parameter type comes from the standard interface constant — no magic strings.
+    CASE iv_type_key.
+      WHEN gc_type_approved OR gc_type_rejected OR gc_type_submitted.
+        APPEND VALUE #(
+          name         = gc_param_req_title
+          type         = /iwngw/if_notif_provider=>gcs_parameter_types-type_string
+          is_sensitive = abap_false
+        ) TO et_parameter.
+    ENDCASE.
   ENDMETHOD.
+
 
   METHOD /iwngw/if_notif_provider~get_notification_type.
-    " Đã sửa: Gán trực tiếp vào cấu trúc đơn ES_NOTIFICATION_TYPE thay vì append bảng
+    " Assign type metadata directly into the single export structure.
+    " is_actionable is intentionally omitted for compatibility with the
+    " current SAP Gateway version deployed on this system.
     CASE iv_type_key.
-      WHEN 'REQ_APPROVED' OR 'REQ_REJECTED' OR 'REQ_SUBMITTED'.
-        es_notification_type-type_key      = iv_type_key.
-        es_notification_type-version       = '1'.
-        " Đã bỏ is_actionable để tương thích với phiên bản SAP Gateway hiện tại
+      WHEN gc_type_approved OR gc_type_rejected OR gc_type_submitted.
+        es_notification_type-type_key = iv_type_key.
+        es_notification_type-version  = gc_type_version.
     ENDCASE.
   ENDMETHOD.
+
 
   METHOD /iwngw/if_notif_provider~get_notification_type_text.
-    " Đã sửa: Gán vào ES_TYPE_TEXT và bỏ trường LANGUAGE
+    " Notification display templates shown in the Fiori Launchpad bell icon.
+    " {ReqTitle} is substituted at runtime by the notification framework.
+    " Both public and sensitive templates are identical — no confidential data
+    " is included in the notification text itself.
     CASE iv_type_key.
-      WHEN 'REQ_APPROVED'.
-        es_type_text-template_public    = ' Phê duyệt: Phiếu cấu hình {ReqTitle} đã được sếp duyệt!'.
-        es_type_text-template_sensitive = ' Phê duyệt: Phiếu cấu hình {ReqTitle} đã được sếp duyệt!'.
+      WHEN gc_type_approved.
+        es_type_text-template_public    = 'Approved: Configuration request "{ReqTitle}" has been approved.'.
+        es_type_text-template_sensitive = 'Approved: Configuration request "{ReqTitle}" has been approved.'.
 
-      WHEN 'REQ_REJECTED'.
-        es_type_text-template_public    = ' Từ chối: Phiếu {ReqTitle} của bạn không được duyệt.'.
-        es_type_text-template_sensitive = ' Từ chối: Phiếu {ReqTitle} của bạn không được duyệt.'.
+      WHEN gc_type_rejected.
+        es_type_text-template_public    = 'Rejected: Configuration request "{ReqTitle}" was not approved.'.
+        es_type_text-template_sensitive = 'Rejected: Configuration request "{ReqTitle}" was not approved.'.
 
-      WHEN 'REQ_SUBMITTED'.
-        es_type_text-template_public    = ' Chờ duyệt: Có yêu cầu cấu hình mới {ReqTitle}.'.
-        es_type_text-template_sensitive = ' Chờ duyệt: Có yêu cầu cấu hình mới {ReqTitle}.'.
+      WHEN gc_type_submitted.
+        es_type_text-template_public    = 'Pending Approval: A new configuration request "{ReqTitle}" requires your review.'.
+        es_type_text-template_sensitive = 'Pending Approval: A new configuration request "{ReqTitle}" requires your review.'.
     ENDCASE.
   ENDMETHOD.
 
+
   METHOD /iwngw/if_notif_provider~handle_action.
+    " No custom action handling required for this notification type.
   ENDMETHOD.
 
+
   METHOD /iwngw/if_notif_provider~handle_bulk_action.
+    " No bulk action handling required for this notification type.
   ENDMETHOD.
 
 ENDCLASS.
+

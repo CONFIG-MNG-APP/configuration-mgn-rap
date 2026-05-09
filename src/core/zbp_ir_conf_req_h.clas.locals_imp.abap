@@ -341,8 +341,6 @@
       ENDMETHOD.
 
 
-
-
       METHOD reject.
         DATA lv_now TYPE timestampl.
         GET TIME STAMP FIELD lv_now.
@@ -504,6 +502,26 @@
             CONTINUE.
           ENDIF.
 
+          " Block submission when no configuration rows have been added to domain tables
+          DATA(lv_rk)    = <r>-ReqId.
+          DATA(lv_total) = 0.
+          DATA(lv_extra) = 0.
+          CASE CONV string( <r>-ModuleId ).
+              WHEN 'FI'. SELECT COUNT(*) FROM zfilimitreq     WHERE req_id = @lv_rk INTO @lv_total.
+              WHEN 'SD'. SELECT COUNT(*) FROM zsd_price_req   WHERE req_id = @lv_rk INTO @lv_total.
+            WHEN 'MM'.
+              SELECT COUNT(*) FROM zmmsafestock_req WHERE req_id = @lv_rk INTO @lv_total.
+              SELECT COUNT(*) FROM zmmrouteconf_req  WHERE req_id = @lv_rk INTO @lv_extra.
+              lv_total = lv_total + lv_extra.
+          ENDCASE.
+          IF lv_total = 0.
+            APPEND VALUE #( %tky = <r>-%tky %msg = new_message_with_text(
+              severity = if_abap_behv_message=>severity-error
+              text     = 'Please add at least one configuration row before submitting' ) ) TO reported-Req.
+            APPEND VALUE #( %tky = <r>-%tky ) TO failed-req.
+            CONTINUE.
+          ENDIF.
+
           MODIFY ENTITIES OF zir_conf_req_h IN LOCAL MODE ENTITY Req
             UPDATE FIELDS ( Status )
             WITH VALUE #( ( %tky = <r>-%tky Status = gc_st_submitted ) ).
@@ -585,28 +603,36 @@
             CONTINUE.
           ENDIF.
 
-          " Determine the next environment in the chain
-          DATA(lv_next_env) = CONV zde_env_id( SWITCH #( condense( <r>-EnvId )
-            WHEN 'DEV' THEN 'QAS'
-            WHEN 'QAS' THEN 'PRD'
-            ELSE '' ) ).
+          " Determine the next environment by reading ZENVDEF instead of hardcoding the chain
+          SELECT SINGLE next_env FROM zenvdef
+            WHERE env_id    = @<r>-EnvId
+              AND is_active = @abap_true
+            INTO @DATA(lv_next_env).
 
           IF lv_next_env IS INITIAL.
             APPEND VALUE #( %tky = <r>-%tky
               %msg = new_message_with_text(
                 severity = if_abap_behv_message=>severity-error
-                text     = 'Request is already at PRD environment, cannot promote further.' )
+                text     = 'Request is already at the last environment, cannot promote further.' )
             ) TO reported-req.
             APPEND VALUE #( %tky = <r>-%tky ) TO failed-req.
             CONTINUE.
           ENDIF.
 
+          " Check if the target is the final environment (no further next_env defined in ZENVDEF)
+          SELECT SINGLE next_env FROM zenvdef
+            WHERE env_id    = @lv_next_env
+              AND is_active = @abap_true
+            INTO @DATA(lv_after_next_env).
+          DATA(lv_is_final_env) = COND abap_bool(
+            WHEN lv_after_next_env IS INITIAL THEN abap_true ELSE abap_false ).
+
           " ── Get a single global version for each module when promoting to PRD ──
-          IF lv_next_env = 'PRD'.
-            lv_prd_ver_ss = zcl_gsp26_rule_version=>get_global_version( iv_table_name = 'ZMMSAFESTOCK'   iv_env_id = 'PRD' ).
-            lv_prd_ver_rt = zcl_gsp26_rule_version=>get_global_version( iv_table_name = 'ZMMROUTECONF'   iv_env_id = 'PRD' ).
-            lv_prd_ver_fi = zcl_gsp26_rule_version=>get_global_version( iv_table_name = 'ZFILIMITCONF'   iv_env_id = 'PRD' ).
-            lv_prd_ver_sd = zcl_gsp26_rule_version=>get_global_version( iv_table_name = 'ZSD_PRICE_CONF' iv_env_id = 'PRD' ).
+          IF lv_is_final_env = abap_true.
+            lv_prd_ver_ss = zcl_gsp26_rule_version=>get_global_version( iv_table_name = 'ZMMSAFESTOCK'   iv_env_id = lv_next_env ).
+            lv_prd_ver_rt = zcl_gsp26_rule_version=>get_global_version( iv_table_name = 'ZMMROUTECONF'   iv_env_id = lv_next_env ).
+            lv_prd_ver_fi = zcl_gsp26_rule_version=>get_global_version( iv_table_name = 'ZFILIMITCONF'   iv_env_id = lv_next_env ).
+            lv_prd_ver_sd = zcl_gsp26_rule_version=>get_global_version( iv_table_name = 'ZSD_PRICE_CONF' iv_env_id = lv_next_env ).
           ENDIF.
 
           " ── Promote all modules to target env ──
@@ -629,11 +655,11 @@
 
           " ── Update request header: move env_id to next env ──
           " EnvId is a RAP key field — cannot change via MODIFY ENTITIES UPDATE.
-          " Use direct SQL to shift the row's env_id (DEV→QAS or QAS→PRD).
-          " Status = ACTIVE only when reaching PRD (config is fully live).
+          " Use direct SQL to shift the row's env_id (DEV -> QAS or QAS -> PRD).
+          " Status = ACTIVE only when reaching the final environment (config is fully live).
           " Status stays APPROVED while still promoting through intermediate envs.
           DATA lv_new_status TYPE zde_requ_status.
-          lv_new_status = COND #( WHEN lv_next_env = 'PRD'
+          lv_new_status = COND #( WHEN lv_is_final_env = abap_true
                                   THEN gc_st_active
                                   ELSE gc_st_approved ).
           UPDATE zconfreqh
@@ -661,7 +687,6 @@
         result = VALUE #( FOR r IN reqs ( %tky = r-%tky ) ).
       ENDMETHOD.
 
-
       METHOD rollback.
         DATA lv_now TYPE timestampl.
         GET TIME STAMP FIELD lv_now.
@@ -669,6 +694,16 @@
         READ ENTITIES OF zir_conf_req_h IN LOCAL MODE
           ENTITY Req ALL FIELDS WITH CORRESPONDING #( keys )
           RESULT DATA(reqs).
+
+        " Find the initial environment: the active env that no other active env points to as next_env
+        SELECT SINGLE env_id FROM zenvdef AS e
+          WHERE is_active = @abap_true
+            AND NOT EXISTS (
+              SELECT * FROM zenvdef
+                WHERE next_env = e~env_id
+                  AND is_active = @abap_true
+            )
+          INTO @DATA(lv_initial_env).
 
         LOOP AT reqs ASSIGNING FIELD-SYMBOL(<r>).
           IF <r>-Status <> gc_st_approved AND <r>-Status <> gc_st_active.
@@ -725,9 +760,9 @@
           ENDTRY.
 
           " Use direct SQL like promote() — avoids RAP buffer/DB key conflict when env_id changes.
-          " restore_from_snapshot() reverts ALL environments at once, so env_id resets to DEV.
+          " restore_from_snapshot() reverts ALL environments at once, so env_id resets to the initial env.
           UPDATE zconfreqh
-            SET env_id     = 'DEV',
+            SET env_id     = @lv_initial_env,
                 status     = @gc_st_rolled_back,
                 changed_by = @sy-uname,
                 changed_at = @lv_now

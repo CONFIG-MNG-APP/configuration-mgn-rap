@@ -1,67 +1,24 @@
 *&---------------------------------------------------------------------*
-*& Report ztransmode
+*& Report zseed_transmode
 *&---------------------------------------------------------------------*
-*&
-*&---------------------------------------------------------------------*
-REPORT ztransmode.
+REPORT zseed_transmode.
 
-" DELETE FROM zconfreqh.
+WRITE: / '=== Seeding Transport Modes for ZTRANSMODE ==='.
 
-" COMMIT WORK.
+" 1. Xóa toàn bộ dữ liệu cũ
+DELETE FROM ztransmode.
+WRITE: / |Deleted old data: { sy-dbcnt } row(s).|.
 
-" WRITE: / |Seeded { sy-dbcnt } row(s) into ZTRANSMODE.|.
-
-DATA: lv_lines TYPE i.
-DATA: lv_total TYPE i.
-
-WRITE: / '=== Clearing Request & Config Data ==='.
-WRITE: /.
-
-" --- Request Header & Item ---
-DELETE FROM zconfreqh.
-lv_lines = sy-dbcnt.
-lv_total = lv_total + lv_lines.
-WRITE: / |Deleted { lv_lines } row(s) from ZCONFREQH (Request Header)|.
-
-DELETE FROM zconfreqi.
-lv_lines = sy-dbcnt.
-lv_total = lv_total + lv_lines.
-WRITE: / |Deleted { lv_lines } row(s) from ZCONFREQI (Request Item)|.
-
-" --- SD Config Request ---
-DELETE FROM zsd_price_conf_d.
-lv_lines = sy-dbcnt.
-lv_total = lv_total + lv_lines.
-WRITE: / |Deleted { lv_lines } row(s) from ZSD_PRICE_CONF_D (SD Price Config Draft)|.
-
-DELETE FROM zsd_price_req.
-lv_lines = sy-dbcnt.
-lv_total = lv_total + lv_lines.
-WRITE: / |Deleted { lv_lines } row(s) from ZSD_PRICE_REQ (SD Price Request)|.
-
-" --- FI Config Request ---
-DELETE FROM zfi_limit_d.
-lv_lines = sy-dbcnt.
-lv_total = lv_total + lv_lines.
-WRITE: / |Deleted { lv_lines } row(s) from ZFI_LIMIT_D (FI Limit Config Draft)|.
-
-DELETE FROM zfilimitreq.
-lv_lines = sy-dbcnt.
-lv_total = lv_total + lv_lines.
-WRITE: / |Deleted { lv_lines } row(s) from ZFILIMITREQ (FI Limit Config Request)|.
-
-" --- MM Config Request ---
-DELETE FROM zmmrouteconf_req.
-lv_lines = sy-dbcnt.
-lv_total = lv_total + lv_lines.
-WRITE: / |Deleted { lv_lines } row(s) from ZMMROUTECONF_REQ (MM Route Config Request)|.
-
-DELETE FROM zmmsafestock_req.
-lv_lines = sy-dbcnt.
-lv_total = lv_total + lv_lines.
-WRITE: / |Deleted { lv_lines } row(s) from ZMMSAFESTOCK_REQ (MM Safe Stock Request)|.
+" 2. Chèn dữ liệu mới cho chuỗi cung ứng xe đạp
+INSERT ztransmode FROM TABLE @( VALUE #(
+  ( client = sy-mandt  trans_mode = 'TRUK' description = 'Standard Truck Delivery'  is_active = abap_true )
+  ( client = sy-mandt  trans_mode = 'EVAN' description = 'Express Van Delivery'     is_active = abap_true )
+  ( client = sy-mandt  trans_mode = 'PICK' description = 'In-Store Pickup'          is_active = abap_true )
+  ( client = sy-mandt  trans_mode = 'SEA'  description = 'Ocean Freight (Bulk)'     is_active = abap_true )
+  ( client = sy-mandt  trans_mode = 'RAIL' description = 'Domestic Rail Freight'    is_active = abap_true )
+  ( client = sy-mandt  trans_mode = 'AIR'  description = 'Express Air (Urgent Part)'is_active = abap_true )
+  ( client = sy-mandt  trans_mode = 'POST' description = 'Postal Service (Defunct)' is_active = abap_false ) " Demo Inactive
+) ).
 
 COMMIT WORK.
-
-WRITE: /.
-WRITE: / |=== Total deleted: { lv_total } row(s) ===|.
+WRITE: / |Seeded new data: { sy-dbcnt } row(s) into ZTRANSMODE.|.
